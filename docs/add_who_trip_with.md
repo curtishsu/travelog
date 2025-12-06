@@ -1,0 +1,13 @@
+# Goal of Feature
+Ultimately, I will want to know who I went on a trip with. People make up a huge components of trips, and is important to commemorate with. Each trip should have only one group. Groups cannot be subtracted, so new groups need to be created. Trip groups are not required. 
+
+## Feature
+When defining a trip in the trip overview, create a section called 'Trip Group'. This is a free string text field. However, when typing out the name of a group, it pulls from the list of existing group names for a given user to give suggestions. If no group exists, there should be a 'Create New Group' suggestion. This should happen as the user is typing. Trip names are max 16 characters and must be unique. 
+
+## Defining groups
+Each group is made up of a list of names. You can edit the people in a trip group in two ways. On the trip overview page, when you add in a trip group, there should be a button that says 'Edit Group'. Upon clicking, an interstitial will pop up. At the top is the name of the Trip Group. Underneath is a series of rows with two text box columns. The first text box has a place holder saying first name and the second text box has a text box with a place holder saying last name. 
+There are default 3 text box rows. If the three text boxes are all filled, then the number of rows should expand. This should continue as the rows get filled. If rows are blank, they are dropped automatically. This interstitial should be scrollable. Users can be deleted from a group, and this will impact historical groups. At the bottom are three buttons; delete, cancel and save. Upon cancel, the changes are discarded. If a name apperas twice, they should be de-duped. There is an 'X' at the top right. Upon clicking delete, a user gets a confirmation prompt. 
+
+Names of people on groups (First + Last Name) are unique. If someone tries to create a group with a name that is already taken (including if just a first name is provided), flag which name is causing the error. However, First and last names are not required and do not let them save.
+
+The second entry point is from the settings menu on the side. When clicking that button, there is a tab named 'Trip Groups.' Upon clicking that button, a page appears with a header saying 'Trip Groups'. Beneath it is a table with Group Name as the header for the first column and Group Members in the second. Group members should be presented as First Name Last Initial in this column, with overflow being taken up but elipses. A user can click into the row to select the trip group, which opens the same modal. 

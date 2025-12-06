@@ -1,0 +1,90 @@
+import { Hash, MapPin } from 'lucide-react';
+
+import { PhotoGallery } from '@/features/photos/components/photo-gallery';
+import type { TripDayWithRelations } from '@/features/trips/types';
+import { formatDateForDisplay } from '@/lib/date';
+
+type TripDaySectionProps = {
+  day: TripDayWithRelations;
+};
+
+function renderLocations(day: TripDayWithRelations) {
+  if (!day.trip_locations?.length) {
+    return null;
+  }
+
+  const locations = day.trip_locations.map((location) => location.display_name).join(' • ');
+
+  return (
+    <div className="flex items-start gap-2 text-sm text-slate-300">
+      <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-500" />
+      <p>{locations}</p>
+    </div>
+  );
+}
+
+function renderHashtags(day: TripDayWithRelations) {
+  if (!day.trip_day_hashtags?.length) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-300">
+      <Hash className="mr-1 h-3 w-3 text-slate-500" />
+      {day.trip_day_hashtags.map((tag) => (
+        <span key={tag.id} className="rounded-full bg-slate-800 px-3 py-1 text-slate-100">
+          #{tag.hashtag}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function TripDaySection({ day }: TripDaySectionProps) {
+  const hasHighlight = Boolean(day.highlight?.trim());
+  const hasJournal = Boolean(day.journal_entry?.trim());
+  const hasContent =
+    hasHighlight ||
+    hasJournal ||
+    (day.trip_locations?.length ?? 0) > 0 ||
+    (day.trip_day_hashtags?.length ?? 0) > 0 ||
+    (day.photos?.length ?? 0) > 0;
+
+  return (
+    <section id={`day-${day.day_index}`} className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
+      <header className="space-y-1">
+        <h2 className="text-lg font-semibold text-white">
+          Day {day.day_index}{' '}
+          <span className="text-sm font-normal text-slate-400">• {formatDateForDisplay(day.date)}</span>
+        </h2>
+      </header>
+      {hasContent ? (
+        <div className="space-y-4 text-sm leading-relaxed text-slate-300">
+          {renderLocations(day)}
+          {hasHighlight ? (
+            <div>
+              <p className="font-semibold text-slate-100">Highlight</p>
+              <p className="mt-1 text-slate-300">{day.highlight}</p>
+            </div>
+          ) : null}
+          {hasJournal ? (
+            <div>
+              <p className="font-semibold text-slate-100">Journal</p>
+              <p className="mt-1 whitespace-pre-line text-slate-300">{day.journal_entry}</p>
+            </div>
+          ) : null}
+          {renderHashtags(day)}
+          {day.photos?.length ? (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-white">Photos</p>
+              <PhotoGallery photos={day.photos} />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">Nothing recorded for this day yet.</p>
+      )}
+    </section>
+  );
+}
+

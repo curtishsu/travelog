@@ -1,0 +1,60 @@
+import { NextRequest } from 'next/server';
+
+import { noContent, serverError, unauthorized } from '@/lib/http';
+import { getSupabaseForRequest } from '@/lib/supabase/context';
+
+type Params = { params: { locationId: string } };
+
+export async function DELETE(_: NextRequest, { params }: Params) {
+  const { supabase, user } = await getSupabaseForRequest();
+
+  if (!user) {
+    return unauthorized();
+  }
+
+  const userId = user.id;
+  const { locationId } = params;
+
+  const { data: location, error: fetchError } = await supabase
+    .from('trip_locations')
+    .select('trip_day_id')
+    .eq('id', locationId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return serverError('Failed to load location.');
+  }
+
+  if (!location) {
+    return noContent();
+  }
+
+  const { data: tripDay, error: tripDayError } = await supabase
+    .from('trip_days')
+    .select('trip_id')
+    .eq('id', location.trip_day_id)
+    .maybeSingle();
+
+  if (tripDayError || !tripDay) {
+    return unauthorized();
+  }
+
+  const { data: trip, error: tripError } = await supabase
+    .from('trips')
+    .select('user_id')
+    .eq('id', tripDay.trip_id)
+    .single();
+
+  if (tripError || trip?.user_id !== userId) {
+    return unauthorized();
+  }
+
+  const { error } = await supabase.from('trip_locations').delete().eq('id', locationId);
+
+  if (error) {
+    return serverError('Failed to delete location.');
+  }
+
+  return noContent();
+}
+

@@ -1,0 +1,3 @@
+Currently, there is a search functionality for a location. However, on a given trip, there's a high likelihood that a user is staying at the same city. For a given trip, include the past city names as suggestions under the search bar. if a user clicks on that location, fill in that city. 
+The name should be attached to the day, as if the user has searched and clicked on the name. Not just putting in the name as a suggestion. 
+If a past city has already been inputted, then that city should no longer show up under suggestions
