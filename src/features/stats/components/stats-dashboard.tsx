@@ -156,7 +156,9 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
                 isTripTypeView && 'trips' in item && item.trips.length > 0 ? (
                   <Tooltip trigger={<span className="text-slate-200 normal-case">{item.label}</span>} align="left">
                     <div className="space-y-2">
-                      <p className="font-semibold text-slate-100">Trips tagged "{item.label}"</p>
+                      <p className="font-semibold text-slate-100">
+                        Trips tagged &ldquo;{item.label}&rdquo;
+                      </p>
                       <ul className="max-h-48 space-y-1 overflow-y-auto text-left text-slate-200">
                         {item.trips.map((trip) => (
                           <li key={trip.tripId}>

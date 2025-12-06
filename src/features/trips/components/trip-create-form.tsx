@@ -25,7 +25,8 @@ export function TripCreateForm() {
   async function handleSubmit(values: TripOverviewFormValues) {
     setOverlapWarning(null);
 
-    const { tripGroupName: _omit, ...payload } = values;
+    const { tripGroupName: _discardedTripGroupName, ...payload } = values;
+    void _discardedTripGroupName;
 
     const result = await mutateAsync(payload);
     if (result.overlapWarning?.message) {

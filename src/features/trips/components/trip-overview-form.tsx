@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { Plus, Search, X } from 'lucide-react';
 
@@ -83,17 +83,22 @@ export function TripOverviewForm({
     return tripGroups.find((group) => group.id === tripGroupId) ?? null;
   }, [tripGroupId, tripGroups]);
 
+  const clearTripGroupSelection = useCallback(() => {
+    setValue('tripGroupId', null, { shouldDirty: true, shouldValidate: true });
+    setTripGroupDraft('');
+  }, [setTripGroupDraft, setValue]);
+
   useEffect(() => {
     if (selectedTripGroup) {
       setTripGroupDraft(selectedTripGroup.name);
     }
-  }, [selectedTripGroup?.name]);
+  }, [selectedTripGroup]);
 
   useEffect(() => {
     if (tripGroups && tripGroupId && !selectedTripGroup) {
       clearTripGroupSelection();
     }
-  }, [tripGroups, tripGroupId, selectedTripGroup]);
+  }, [tripGroups, tripGroupId, selectedTripGroup, clearTripGroupSelection]);
 
   function normalizeTripType(value: string) {
     return value.trim().replace(/^#/, '').toLowerCase();
@@ -174,11 +179,6 @@ export function TripOverviewForm({
     setGroupModalGroup(group);
     setGroupModalDefaultName(undefined);
     setIsGroupModalOpen(true);
-  }
-
-  function clearTripGroupSelection() {
-    setValue('tripGroupId', null, { shouldDirty: true, shouldValidate: true });
-    setTripGroupDraft('');
   }
 
   async function handleTripGroupModalSubmit(payload: TripGroupInput) {

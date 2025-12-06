@@ -1,10 +1,5 @@
 import { z } from 'zod';
 
-const nonEmptyString = z
-  .string()
-  .trim()
-  .min(1);
-
 export const tripGroupMemberSchema = z.object({
   id: z.string().uuid().optional(),
   firstName: z

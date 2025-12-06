@@ -3,6 +3,7 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 import mapboxgl from 'mapbox-gl';
+import type { Geometry, GeometryCollection } from 'geojson';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Compass, Globe2, X } from 'lucide-react';
 
@@ -19,6 +20,8 @@ const COUNTRY_OUTLINE_LAYER_ID = 'globe-country-outline';
 const COUNTRY_NAME_FIELDS = ['name_en', 'name'];
 
 type MapboxExpression = Exclude<Parameters<mapboxgl.Map['setFilter']>[1], undefined>;
+type MapboxPaintValue = Exclude<Parameters<mapboxgl.Map['setPaintProperty']>[2], undefined>;
+type GeometryWithCoordinates = Exclude<Geometry, GeometryCollection>;
 const CITY_MARKER_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="26" height="26" fill="none">
   <path
@@ -323,16 +326,11 @@ export function MapGlobe({ locations }: MapGlobeProps) {
 
     const isSelectedExpression = buildSingleValueMatchExpression(propertyNames, selectedValue);
 
-    map.setPaintProperty(
-      fillLayerId,
-      'fill-opacity',
-      ['case', isSelectedExpression, 0.65, 0.35] as any
-    );
-    map.setPaintProperty(
-      outlineLayerId,
-      'line-opacity',
-      ['case', isSelectedExpression, 1, 0.6] as any
-    );
+    const selectedFillOpacity: MapboxPaintValue = ['case', isSelectedExpression, 0.65, 0.35];
+    const selectedLineOpacity: MapboxPaintValue = ['case', isSelectedExpression, 1, 0.6];
+
+    map.setPaintProperty(fillLayerId, 'fill-opacity', selectedFillOpacity);
+    map.setPaintProperty(outlineLayerId, 'line-opacity', selectedLineOpacity);
   }, [mapLoaded, mode, selectedGroup]);
 
   useEffect(() => {
@@ -587,18 +585,34 @@ function computeFeatureBounds(feature: mapboxgl.MapboxGeoJSONFeature): mapboxgl.
 
   const bounds = new mapboxgl.LngLatBounds();
 
-  const extendWithCoordinates = (coordinates: any): void => {
-    if (!coordinates) return;
-    if (typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
-      bounds.extend([coordinates[0], coordinates[1]]);
+  const extendWithCoordinates = (coordinates: unknown): void => {
+    if (!Array.isArray(coordinates) || coordinates.length === 0) {
       return;
     }
-    for (const coord of coordinates) {
-      extendWithCoordinates(coord);
+
+    const [longitude, latitude] = coordinates;
+
+    if (typeof longitude === 'number' && typeof latitude === 'number') {
+      bounds.extend([longitude, latitude]);
+      return;
     }
+
+    coordinates.forEach((value) => {
+      extendWithCoordinates(value);
+    });
   };
 
-  extendWithCoordinates((feature.geometry as any).coordinates);
+  const addGeometryCoordinates = (geometry: Geometry): void => {
+    if (geometry.type === 'GeometryCollection') {
+      geometry.geometries.forEach(addGeometryCoordinates);
+      return;
+    }
+
+    const geometryWithCoordinates = geometry as GeometryWithCoordinates;
+    extendWithCoordinates(geometryWithCoordinates.coordinates);
+  };
+
+  addGeometryCoordinates(feature.geometry);
 
   return bounds.isEmpty() ? null : bounds;
 }
@@ -622,7 +636,7 @@ function buildMultiPropertyMatchExpression(
       ] as MapboxExpression
   );
 
-  return matches.length === 1 ? matches[0] : (['any', ...matches] as any);
+  return matches.length === 1 ? matches[0] : (['any', ...matches] as MapboxExpression);
 }
 
 function buildSingleValueMatchExpression(
@@ -630,7 +644,7 @@ function buildSingleValueMatchExpression(
   targetName: string
 ): MapboxExpression {
   if (!propertyNames.length) {
-    return ['literal', false] as any;
+    return ['literal', false] as MapboxExpression;
   }
 
   const comparisons = propertyNames.map(
@@ -642,7 +656,7 @@ function buildSingleValueMatchExpression(
       ] as MapboxExpression
   );
 
-  return comparisons.length === 1 ? comparisons[0] : (['any', ...comparisons] as any);
+  return comparisons.length === 1 ? comparisons[0] : (['any', ...comparisons] as MapboxExpression);
 }
 
 function extractFirstMatchingName(

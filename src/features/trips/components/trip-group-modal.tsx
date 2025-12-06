@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { TripGroup, TripGroupMember } from '@/features/trips/types';
+import type { TripGroup } from '@/features/trips/types';
 import type { TripGroupInput, TripGroupMemberInput } from '@/features/trips/api';
 
 type TripGroupModalMode = 'create' | 'edit';
