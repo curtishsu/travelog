@@ -4,6 +4,7 @@ import { calculateStats } from '@/features/stats/calculate';
 import type { StatsSummary } from '@/features/stats/types';
 import type { TripDetail } from '@/features/trips/types';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { Database } from '@/types/database';
 
 export async function loadTripDetail(tripId: string): Promise<TripDetail> {
   const { supabase, user, isDemoMode } = await getSupabaseForRequest();
@@ -112,9 +113,20 @@ export async function loadMapLocations(): Promise<MapLocationEntry[]> {
     return [];
   }
 
+  const typedTrips = data as Array<
+    Database['public']['Tables']['trips']['Row'] & {
+      trip_days: Array<
+        Database['public']['Tables']['trip_days']['Row'] & {
+          trip_locations: Database['public']['Tables']['trip_locations']['Row'][];
+          trip_day_hashtags: Database['public']['Tables']['trip_day_hashtags']['Row'][];
+        }
+      >;
+    }
+  >;
+
   const entries: MapLocationEntry[] = [];
 
-  for (const trip of data) {
+  for (const trip of typedTrips) {
     for (const tripDay of trip.trip_days ?? []) {
       const hashtags = (tripDay.trip_day_hashtags ?? []).map((tag) => tag.hashtag);
       for (const location of tripDay.trip_locations ?? []) {

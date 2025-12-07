@@ -1,6 +1,21 @@
 import { ok, serverError, unauthorized } from '@/lib/http';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 
+type HashtagRow = {
+  hashtag: string;
+  trip_day_id: string;
+  trip_days: {
+    trip_id: string;
+    trips: { user_id: string } | null;
+  } | null;
+};
+
+type TripTypeRow = {
+  type: string;
+  trip_id: string;
+  trips: { user_id: string } | null;
+};
+
 export async function GET() {
   const { supabase, user } = await getSupabaseForRequest();
 
@@ -25,8 +40,8 @@ export async function GET() {
       throw tripTypesError;
     }
 
-    const hashtagsRows = hashtagsData ?? [];
-    const tripTypesRows = tripTypesData ?? [];
+    const hashtagsRows = (hashtagsData ?? []) as HashtagRow[];
+    const tripTypesRows = (tripTypesData ?? []) as TripTypeRow[];
 
     const hashtags = Array.from(
       new Set(

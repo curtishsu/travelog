@@ -4,6 +4,11 @@ import sharp from 'sharp';
 
 import { badRequest, created, serverError, unauthorized } from '@/lib/http';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { Database } from '@/types/database';
+
+type TripDayRow = Database['public']['Tables']['trip_days']['Row'];
+type TripRow = Database['public']['Tables']['trips']['Row'];
+type PhotoRow = Database['public']['Tables']['photos']['Row'];
 
 export const runtime = 'nodejs';
 
@@ -45,7 +50,7 @@ export async function POST(request: NextRequest) {
       .from('trip_days')
       .select('id,trip_id')
       .eq('id', tripDayId)
-      .maybeSingle();
+      .maybeSingle<Pick<TripDayRow, 'id' | 'trip_id'>>();
 
     if (tripDayError || !tripDay) {
       return badRequest('Trip day not found.');
@@ -55,7 +60,7 @@ export async function POST(request: NextRequest) {
       .from('trips')
       .select('user_id')
       .eq('id', tripDay.trip_id)
-      .single();
+      .single<Pick<TripRow, 'user_id'>>();
 
     if (tripOwnershipError || owningTrip?.user_id !== user.id) {
       return unauthorized();
@@ -111,8 +116,10 @@ export async function POST(request: NextRequest) {
     const fullUrl = supabase.storage.from('photos').getPublicUrl(fullPath).data.publicUrl;
     const thumbnailUrl = supabase.storage.from('photos').getPublicUrl(thumbnailPath).data.publicUrl;
 
-    const { data: photo, error: insertError } = await supabase
-      .from('photos')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const photosTable = supabase.from('photos') as any;
+
+    const { data: photo, error: insertError } = await photosTable
       .insert({
         trip_id: tripId,
         trip_day_id: tripDayId,
@@ -126,11 +133,13 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (insertError || !photo) {
+    const typedPhoto = photo as PhotoRow | null;
+
+    if (insertError || !typedPhoto) {
       throw insertError ?? new Error('Failed to save photo metadata.');
     }
 
-    return created({ photo });
+    return created({ photo: typedPhoto });
   } catch (error) {
     console.error('[POST /api/photos/upload] failed', error);
     return serverError('Failed to process photo upload.');

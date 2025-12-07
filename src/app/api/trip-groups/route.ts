@@ -9,6 +9,7 @@ import type { Database } from '@/types/database';
 type TripGroupRecord = Database['public']['Tables']['trip_groups']['Row'] & {
   members: Database['public']['Tables']['trip_group_members']['Row'][];
 };
+type TripGroupMemberInsert = Database['public']['Tables']['trip_group_members']['Insert'];
 
 function normalizeMemberName(value: string | undefined | null) {
   const trimmed = (value ?? '').trim();
@@ -100,11 +101,12 @@ export async function POST(request: NextRequest) {
   });
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tripGroupsTable = supabase.from('trip_groups') as any;
     const {
       data: insertedGroup,
       error: insertError
-    } = await supabase
-      .from('trip_groups')
+    } = await tripGroupsTable
       .insert({
         user_id: user.id,
         name: parseResult.data.name
@@ -120,13 +122,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (dedupedMembers.length) {
-      const { error: membersError } = await supabase.from('trip_group_members').insert(
-        dedupedMembers.map((member) => ({
-          trip_group_id: insertedGroup.id,
-          first_name: member.first_name,
-          last_name: member.last_name
-        }))
-      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripGroupMembersTable = supabase.from('trip_group_members') as any;
+      const memberRows: TripGroupMemberInsert[] = dedupedMembers.map((member) => ({
+        trip_group_id: insertedGroup.id,
+        first_name: member.first_name,
+        last_name: member.last_name
+      }));
+
+      const { error: membersError } = await tripGroupMembersTable.insert(memberRows);
 
       if (membersError) {
         if ((membersError as { code?: string })?.code === '23505') {

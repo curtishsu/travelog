@@ -8,6 +8,10 @@ import { getSupabaseForRequest } from '@/lib/supabase/context';
 import { deriveTripStatus } from '@/lib/trips/status';
 import type { Database } from '@/types/database';
 
+type TripDayInsert = Database['public']['Tables']['trip_days']['Insert'];
+type TripLinkInsert = Database['public']['Tables']['trip_links']['Insert'];
+type TripTypeInsert = Database['public']['Tables']['trip_types']['Insert'];
+
 type TripGroupWithMembers =
   Database['public']['Tables']['trip_groups']['Row'] & {
     trip_group_members: Database['public']['Tables']['trip_group_members']['Row'][];
@@ -108,11 +112,13 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
         return serverError('Failed to update trip.');
       }
 
-      if (!ownedGroup) {
+      const typedOwnedGroup = ownedGroup as { id: string } | null;
+
+      if (!typedOwnedGroup) {
         return badRequest('Trip group not found.');
       }
 
-      updates.trip_group_id = ownedGroup.id;
+      updates.trip_group_id = typedOwnedGroup.id;
     }
   }
 
@@ -172,14 +178,16 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
 
     if (datesToAdd.length) {
       const placeholderStartIndex = existingTrip.trip_days.length + 1;
-      const dayRows = datesToAdd.map((date, index) => ({
+      const dayRows: TripDayInsert[] = datesToAdd.map((date, index) => ({
         trip_id: tripId,
         date,
         // Use placeholder indices higher than any existing day to avoid unique constraint conflicts.
         day_index: placeholderStartIndex + index
       }));
       relatedUpdateTasks.push(async () => {
-        const { error } = await supabase.from('trip_days').insert(dayRows);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tripDaysTable = supabase.from('trip_days') as any;
+        const { error } = await tripDaysTable.insert(dayRows);
         if (error) {
           throw error;
         }
@@ -188,8 +196,9 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
 
     if (daysToRemove.length) {
       relatedUpdateTasks.push(async () => {
-        const { error } = await supabase
-          .from('trip_days')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tripDaysTable = supabase.from('trip_days') as any;
+        const { error } = await tripDaysTable
           .delete()
           .in(
             'id',
@@ -209,19 +218,21 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
 
   if (parseResult.data.links) {
     relatedUpdateTasks.push(async () => {
-      const { error } = await supabase.from('trip_links').delete().eq('trip_id', tripId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripLinksTable = supabase.from('trip_links') as any;
+      const { error } = await tripLinksTable.delete().eq('trip_id', tripId);
       if (error) {
         throw error;
       }
       if (!parseResult.data.links?.length) {
         return;
       }
-      const linkRows = parseResult.data.links.map((link) => ({
+      const linkRows: TripLinkInsert[] = parseResult.data.links.map((link) => ({
         trip_id: tripId,
         label: link.label,
         url: link.url
       }));
-      const { error: insertLinksError } = await supabase.from('trip_links').insert(linkRows);
+      const { error: insertLinksError } = await tripLinksTable.insert(linkRows);
       if (insertLinksError) {
         throw insertLinksError;
       }
@@ -230,18 +241,20 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
 
   if (parseResult.data.tripTypes) {
     relatedUpdateTasks.push(async () => {
-      const { error } = await supabase.from('trip_types').delete().eq('trip_id', tripId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripTypesTable = supabase.from('trip_types') as any;
+      const { error } = await tripTypesTable.delete().eq('trip_id', tripId);
       if (error) {
         throw error;
       }
       if (!parseResult.data.tripTypes?.length) {
         return;
       }
-      const typeRows = parseResult.data.tripTypes.map((type) => ({
+      const typeRows: TripTypeInsert[] = parseResult.data.tripTypes.map((type) => ({
         trip_id: tripId,
         type
       }));
-      const { error: insertTypeError } = await supabase.from('trip_types').insert(typeRows);
+      const { error: insertTypeError } = await tripTypesTable.insert(typeRows);
       if (insertTypeError) {
         throw insertTypeError;
       }
@@ -251,8 +264,12 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
   const hasTripUpdates = Object.keys(updates).length > 0;
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tripsTable = supabase.from('trips') as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tripDaysTable = supabase.from('trip_days') as any;
     if (hasTripUpdates) {
-      const { error: tripUpdateError } = await supabase.from('trips').update(updates).eq('id', tripId);
+      const { error: tripUpdateError } = await tripsTable.update(updates).eq('id', tripId);
       if (tripUpdateError) {
         if ((tripUpdateError as { code?: string })?.code === '23505') {
           return badRequest('Trip name must be unique.');
@@ -276,8 +293,11 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
       }
 
       if (refreshedDays) {
+        const typedRefreshedDays = refreshedDays as Array<
+          Pick<Database['public']['Tables']['trip_days']['Row'], 'id' | 'date' | 'trip_id'>
+        >;
         const dayIndexUpdates = newDateRange.map((date, index) => {
-          const day = refreshedDays.find((d) => d.date === date);
+          const day = typedRefreshedDays.find((d) => d.date === date);
           if (!day) {
             return null;
           }
@@ -296,16 +316,16 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
             day_index: row.day_index + TEMP_OFFSET
           }));
 
-          const { error: tempUpdateError } = await supabase
-            .from('trip_days')
-            .upsert(tempIndexUpdates, { onConflict: 'id' });
+          const { error: tempUpdateError } = await tripDaysTable.upsert(tempIndexUpdates, {
+            onConflict: 'id'
+          });
           if (tempUpdateError) {
             throw tempUpdateError;
           }
 
-          const { error: dayIndexError } = await supabase
-            .from('trip_days')
-            .upsert(filteredUpdates, { onConflict: 'id' });
+          const { error: dayIndexError } = await tripDaysTable.upsert(filteredUpdates, {
+            onConflict: 'id'
+          });
           if (dayIndexError) {
             throw dayIndexError;
           }

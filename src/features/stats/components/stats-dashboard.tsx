@@ -347,7 +347,10 @@ function TrendChart(props: TrendChartProps) {
   const verticalPadding = 10;
   const baselineY = chartHeight - verticalPadding;
 
-  const values = data.map((point) => (variant === 'trips' ? point.tripCount : point.dayCount));
+  const values =
+    variant === 'trips'
+      ? (data as TripTrendPoint[]).map((point) => point.tripCount)
+      : (data as TravelDayTrendPoint[]).map((point) => point.dayCount);
   const maxValue = hasData ? Math.max(...values) : 0;
 
   const [activeBucket, setActiveBucket] = useState<string | null>(null);
@@ -356,7 +359,10 @@ function TrendChart(props: TrendChartProps) {
 
   const renderablePoints: Array<RenderableTripPoint | RenderableTravelDayPoint> = hasData
     ? data.map((point, index) => {
-        const rawValue = variant === 'trips' ? point.tripCount : point.dayCount;
+        const rawValue =
+          variant === 'trips'
+            ? (point as TripTrendPoint).tripCount
+            : (point as TravelDayTrendPoint).dayCount;
         const x = data.length === 1 ? chartWidth / 2 : (index / (data.length - 1)) * chartWidth;
         const ratio = maxValue ? rawValue / maxValue : 0;
         const y = baselineY - ratio * (chartHeight - verticalPadding * 2);
@@ -493,21 +499,25 @@ function TrendChart(props: TrendChartProps) {
               );
             })}
             {activePoint ? (
-              <TrendTooltipPanel
-                variant={variant}
-                point={activePoint}
-                valueLabel={valueLabel}
-                isTripsExpanded={isExpanded(activePoint.bucket, 'trips')}
-                onToggleTrips={() => toggleExpanded(activePoint.bucket, 'trips')}
-                isTripDaysExpanded={
-                  variant === 'days' ? isExpanded(activePoint.bucket, 'tripDays') : undefined
-                }
-                onToggleTripDays={
-                  variant === 'days'
-                    ? () => toggleExpanded(activePoint.bucket, 'tripDays')
-                    : undefined
-                }
-              />
+              variant === 'trips' ? (
+                <TrendTooltipPanel
+                  variant="trips"
+                  point={activePoint as RenderableTripPoint}
+                  valueLabel={valueLabel}
+                  isTripsExpanded={isExpanded(activePoint.bucket, 'trips')}
+                  onToggleTrips={() => toggleExpanded(activePoint.bucket, 'trips')}
+                />
+              ) : (
+                <TrendTooltipPanel
+                  variant="days"
+                  point={activePoint as RenderableTravelDayPoint}
+                  valueLabel={valueLabel}
+                  isTripsExpanded={isExpanded(activePoint.bucket, 'trips')}
+                  onToggleTrips={() => toggleExpanded(activePoint.bucket, 'trips')}
+                  isTripDaysExpanded={isExpanded(activePoint.bucket, 'tripDays')}
+                  onToggleTripDays={() => toggleExpanded(activePoint.bucket, 'tripDays')}
+                />
+              )
             ) : null}
           </div>
           <div

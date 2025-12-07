@@ -3,6 +3,14 @@ import { NextRequest } from 'next/server';
 import { badRequest, ok, serverError, unauthorized } from '@/lib/http';
 import { tripDayUpdateSchema } from '@/lib/schemas/trips';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { Database } from '@/types/database';
+
+type TripDayRow = Database['public']['Tables']['trip_days']['Row'];
+type TripRow = Database['public']['Tables']['trips']['Row'];
+type TripLocationRow = Database['public']['Tables']['trip_locations']['Row'];
+type PhotoRow = Database['public']['Tables']['photos']['Row'];
+type TripLocationInsert = Database['public']['Tables']['trip_locations']['Insert'];
+type TripDayHashtagInsert = Database['public']['Tables']['trip_day_hashtags']['Insert'];
 
 type Params = { params: { tripId: string; dayIndex: string } };
 
@@ -41,7 +49,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     )
     .eq('trip_id', tripId)
     .eq('day_index', index)
-    .maybeSingle();
+    .maybeSingle<TripDayRow & {
+      trip_locations: TripLocationRow[];
+      photos: PhotoRow[];
+      trip_day_hashtags: Database['public']['Tables']['trip_day_hashtags']['Row'][];
+    }>();
 
   if (dayError || !tripDay) {
     return badRequest('Trip day not found.');
@@ -51,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .from('trips')
     .select('user_id')
     .eq('id', tripId)
-    .single();
+    .single<Pick<TripRow, 'user_id'>>();
 
   if (tripOwnershipError || owningTrip?.user_id !== userId) {
     return unauthorized();
@@ -68,9 +80,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tripDaysTable = supabase.from('trip_days') as any;
     if (Object.keys(updates).length) {
-      const { error: updateError } = await supabase
-        .from('trip_days')
+      const { error: updateError } = await tripDaysTable
         .update(updates)
         .eq('id', tripDay.id);
       if (updateError) {
@@ -80,21 +93,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     if (parseResult.data.hashtags) {
       const normalized = Array.from(new Set(parseResult.data.hashtags));
-      const { error: deleteError } = await supabase
-        .from('trip_day_hashtags')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripDayHashtagsTable = supabase.from('trip_day_hashtags') as any;
+      const { error: deleteError } = await tripDayHashtagsTable
         .delete()
         .eq('trip_day_id', tripDay.id);
       if (deleteError) {
         throw deleteError;
       }
       if (normalized.length) {
-        const hashtagRows = normalized.map((tag) => ({
+        const hashtagRows: TripDayHashtagInsert[] = normalized.map((tag) => ({
           trip_day_id: tripDay.id,
           hashtag: tag
         }));
-        const { error: insertHashtagError } = await supabase
-          .from('trip_day_hashtags')
-          .insert(hashtagRows);
+        const { error: insertHashtagError } = await tripDayHashtagsTable.insert(hashtagRows);
         if (insertHashtagError) {
           throw insertHashtagError;
         }
@@ -102,7 +114,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     if (parseResult.data.locationsToAdd?.length) {
-      const locationRows = parseResult.data.locationsToAdd.map((location) => ({
+      const locationRows: TripLocationInsert[] = parseResult.data.locationsToAdd.map((location) => ({
         trip_day_id: tripDay.id,
         display_name: location.displayName,
         city: location.city ?? null,
@@ -111,17 +123,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         lat: location.lat,
         lng: location.lng
       }));
-      const { error: insertLocationsError } = await supabase
-        .from('trip_locations')
-        .insert(locationRows);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripLocationsTable = supabase.from('trip_locations') as any;
+      const { error: insertLocationsError } = await tripLocationsTable.insert(locationRows);
       if (insertLocationsError) {
         throw insertLocationsError;
       }
     }
 
     if (parseResult.data.locationIdsToRemove?.length) {
-      const { error: deleteLocationsError } = await supabase
-        .from('trip_locations')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripLocationsTable = supabase.from('trip_locations') as any;
+      const { error: deleteLocationsError } = await tripLocationsTable
         .delete()
         .in('id', parseResult.data.locationIdsToRemove);
       if (deleteLocationsError) {
@@ -129,8 +142,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    const { data: refreshedDay, error: refreshError } = await supabase
-      .from('trip_days')
+    const { data: refreshedDay, error: refreshError } = await tripDaysTable
       .select(
         `
           *,
@@ -142,11 +154,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .eq('id', tripDay.id)
       .single();
 
-    if (refreshError || !refreshedDay) {
+    const typedRefreshedDay = refreshedDay as
+      | (TripDayRow & {
+          trip_locations: TripLocationRow[];
+          photos: PhotoRow[];
+          trip_day_hashtags: Database['public']['Tables']['trip_day_hashtags']['Row'][];
+        })
+      | null;
+
+    if (refreshError || !typedRefreshedDay) {
       throw refreshError ?? new Error('Failed to reload trip day.');
     }
 
-    return ok({ tripDay: refreshedDay });
+    return ok({ tripDay: typedRefreshedDay });
   } catch (error) {
     console.error('[PATCH /api/trips/:id/days/:dayIndex] failed', error);
     return serverError('Failed to update trip day.');

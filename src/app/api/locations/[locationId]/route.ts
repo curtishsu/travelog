@@ -2,8 +2,13 @@ import { NextRequest } from 'next/server';
 
 import { noContent, serverError, unauthorized } from '@/lib/http';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { Database } from '@/types/database';
 
 type Params = { params: { locationId: string } };
+
+type TripLocationRow = Database['public']['Tables']['trip_locations']['Row'];
+type TripDayRow = Database['public']['Tables']['trip_days']['Row'];
+type TripRow = Database['public']['Tables']['trips']['Row'];
 
 export async function DELETE(_: NextRequest, { params }: Params) {
   const { supabase, user } = await getSupabaseForRequest();
@@ -19,7 +24,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     .from('trip_locations')
     .select('trip_day_id')
     .eq('id', locationId)
-    .maybeSingle();
+    .maybeSingle<Pick<TripLocationRow, 'trip_day_id'>>();
 
   if (fetchError) {
     return serverError('Failed to load location.');
@@ -33,7 +38,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     .from('trip_days')
     .select('trip_id')
     .eq('id', location.trip_day_id)
-    .maybeSingle();
+    .maybeSingle<Pick<TripDayRow, 'trip_id'>>();
 
   if (tripDayError || !tripDay) {
     return unauthorized();
@@ -43,7 +48,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     .from('trips')
     .select('user_id')
     .eq('id', tripDay.trip_id)
-    .single();
+    .single<Pick<TripRow, 'user_id'>>();
 
   if (tripError || trip?.user_id !== userId) {
     return unauthorized();

@@ -312,7 +312,8 @@ export function TripGroupModal({
             {mode === 'edit' && group?.id && onDelete ? (
               <Button
                 type="button"
-                variant="destructive"
+                variant="ghost"
+                className="border border-red-500/40 text-red-300 hover:bg-red-500/10"
                 onClick={handleDelete}
                 disabled={isSubmitting || isDeleting}
               >

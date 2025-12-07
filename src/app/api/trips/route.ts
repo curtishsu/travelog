@@ -7,6 +7,10 @@ import { tripCreateSchema } from '@/lib/schemas/trips';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 import type { Database } from '@/types/database';
 
+type TripDayInsert = Database['public']['Tables']['trip_days']['Insert'];
+type TripLinkInsert = Database['public']['Tables']['trip_links']['Insert'];
+type TripTypeInsert = Database['public']['Tables']['trip_types']['Insert'];
+
 export async function GET() {
   const { supabase, user } = await getSupabaseForRequest();
 
@@ -90,15 +94,18 @@ export async function POST(request: NextRequest) {
         return serverError('Failed to create trip.');
       }
 
-      if (!ownedGroup) {
+      const typedOwnedGroup = ownedGroup as { id: string } | null;
+
+      if (!typedOwnedGroup) {
         return badRequest('Trip group not found.');
       }
 
-      resolvedTripGroupId = ownedGroup.id;
+      resolvedTripGroupId = typedOwnedGroup.id;
     }
 
-    const { data: insertedTrips, error: insertTripError } = await supabase
-      .from('trips')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tripsTable = supabase.from('trips') as any;
+    const { data: insertedTrips, error: insertTripError } = await tripsTable
       .insert({
         user_id: userId,
         name,
@@ -118,35 +125,41 @@ export async function POST(request: NextRequest) {
     }
 
     const dayRange = getDateRange(startDateISO, endDateISO);
-    const dayRows = dayRange.map((date, index) => ({
+    const dayRows: TripDayInsert[] = dayRange.map((date, index) => ({
       trip_id: insertedTrips.id,
       day_index: index + 1,
       date
     }));
 
-    const { error: insertDaysError } = await supabase.from('trip_days').insert(dayRows);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tripDaysTable = supabase.from('trip_days') as any;
+    const { error: insertDaysError } = await tripDaysTable.insert(dayRows);
     if (insertDaysError) {
       throw insertDaysError;
     }
 
     if (links?.length) {
-      const linkRows = links.map((link) => ({
+      const linkRows: TripLinkInsert[] = links.map((link) => ({
         trip_id: insertedTrips.id,
         label: link.label,
         url: link.url
       }));
-      const { error: linkError } = await supabase.from('trip_links').insert(linkRows);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripLinksTable = supabase.from('trip_links') as any;
+      const { error: linkError } = await tripLinksTable.insert(linkRows);
       if (linkError) {
         throw linkError;
       }
     }
 
     if (tripTypes?.length) {
-      const typeRows = tripTypes.map((type) => ({
+      const typeRows: TripTypeInsert[] = tripTypes.map((type) => ({
         trip_id: insertedTrips.id,
         type
       }));
-      const { error: typeError } = await supabase.from('trip_types').insert(typeRows);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripTypesTable = supabase.from('trip_types') as any;
+      const { error: typeError } = await tripTypesTable.insert(typeRows);
       if (typeError) {
         throw typeError;
       }

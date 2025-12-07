@@ -3,8 +3,12 @@ import { NextRequest } from 'next/server';
 import { noContent, serverError, unauthorized } from '@/lib/http';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 import { removeStorageObjectByUrl } from '@/lib/storage';
+import type { Database } from '@/types/database';
 
 type Params = { params: { photoId: string } };
+
+type PhotoRow = Database['public']['Tables']['photos']['Row'];
+type TripRow = Database['public']['Tables']['trips']['Row'];
 
 export async function DELETE(_: NextRequest, { params }: Params) {
   const { supabase, user } = await getSupabaseForRequest();
@@ -19,7 +23,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     .from('photos')
     .select('id,thumbnail_url,full_url,trip_id')
     .eq('id', photoId)
-    .maybeSingle();
+    .maybeSingle<Pick<PhotoRow, 'id' | 'thumbnail_url' | 'full_url' | 'trip_id'>>();
 
   if (fetchError) {
     return serverError('Failed to load photo.');
@@ -30,7 +34,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       .from('trips')
       .select('user_id')
       .eq('id', photo.trip_id)
-      .single();
+      .single<Pick<TripRow, 'user_id'>>();
 
     if (tripOwnershipError || owningTrip?.user_id !== userId) {
       return unauthorized();

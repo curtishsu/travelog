@@ -9,6 +9,7 @@ import type { Database } from '@/types/database';
 type TripGroupRecord = Database['public']['Tables']['trip_groups']['Row'] & {
   members: Database['public']['Tables']['trip_group_members']['Row'][];
 };
+type TripGroupMemberInsert = Database['public']['Tables']['trip_group_members']['Insert'];
 
 function normalizeMemberName(value: string | undefined | null) {
   const trimmed = (value ?? '').trim();
@@ -97,10 +98,9 @@ export async function PATCH(request: NextRequest, context: { params: { tripGroup
     }
 
     if (Object.keys(updates).length) {
-      const { error: updateError } = await supabase
-        .from('trip_groups')
-        .update(updates)
-        .eq('id', existingGroup.id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripGroupsTable = supabase.from('trip_groups') as any;
+      const { error: updateError } = await tripGroupsTable.update(updates).eq('id', existingGroup.id);
 
       if (updateError) {
         if ((updateError as { code?: string })?.code === '23505') {
@@ -129,6 +129,9 @@ export async function PATCH(request: NextRequest, context: { params: { tripGroup
         return true;
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripGroupMembersTable = supabase.from('trip_group_members') as any;
+
       const existingMembersMap = new Map(
         (existingGroup.members ?? []).map((member) => [member.id, member])
       );
@@ -142,10 +145,7 @@ export async function PATCH(request: NextRequest, context: { params: { tripGroup
         .map((member) => member.id);
 
       if (membersToDelete.length) {
-        const { error: deleteError } = await supabase
-          .from('trip_group_members')
-          .delete()
-          .in('id', membersToDelete);
+        const { error: deleteError } = await tripGroupMembersTable.delete().in('id', membersToDelete);
 
         if (deleteError) {
           throw deleteError;
@@ -166,7 +166,7 @@ export async function PATCH(request: NextRequest, context: { params: { tripGroup
         });
 
       if (membersToUpdate.length) {
-        const { error: updateMembersError } = await supabase.from('trip_group_members').upsert(
+        const { error: updateMembersError } = await tripGroupMembersTable.upsert(
           membersToUpdate.map((member) => ({
             id: member.id,
             trip_group_id: existingGroup.id,
@@ -186,13 +186,13 @@ export async function PATCH(request: NextRequest, context: { params: { tripGroup
       const membersToInsert = dedupedMembers.filter((member) => !member.id);
 
       if (membersToInsert.length) {
-        const { error: insertMembersError } = await supabase.from('trip_group_members').insert(
-          membersToInsert.map((member) => ({
-            trip_group_id: existingGroup.id,
-            first_name: member.first_name,
-            last_name: member.last_name
-          }))
-        );
+        const memberRows: TripGroupMemberInsert[] = membersToInsert.map((member) => ({
+          trip_group_id: existingGroup.id,
+          first_name: member.first_name,
+          last_name: member.last_name
+        }));
+
+        const { error: insertMembersError } = await tripGroupMembersTable.insert(memberRows);
 
         if (insertMembersError) {
           if ((insertMembersError as { code?: string })?.code === '23505') {
