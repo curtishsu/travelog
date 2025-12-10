@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+
 import { TripEditor } from '@/features/trips/components/trip-editor';
 import { loadTripDetail } from '@/features/trips/server';
 
@@ -7,7 +9,12 @@ type TripEditPageProps = {
 };
 
 export default async function TripEditPage({ params, searchParams }: TripEditPageProps) {
-  const trip = await loadTripDetail(params.tripId);
+  const { trip, guestModeEnabled } = await loadTripDetail(params.tripId);
+
+  if (guestModeEnabled) {
+    redirect(`/trips/${params.tripId}`);
+  }
+
   const candidateTab = searchParams.tab ?? 'overview';
   const validTabs = [
     'overview',

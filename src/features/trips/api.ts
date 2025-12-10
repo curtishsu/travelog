@@ -21,6 +21,8 @@ export type TripOverviewPayload = {
 export type TripUpdatePayload = Partial<Omit<TripOverviewPayload, 'links' | 'tripTypes'>> & {
   links?: TripLinkInput[];
   tripTypes?: string[];
+  isTripContentLocked?: boolean;
+  isReflectionLocked?: boolean;
 };
 
 export type LocationInput = {
@@ -38,6 +40,7 @@ export type TripDayUpdatePayload = {
   hashtags?: string[];
   locationsToAdd?: LocationInput[];
   locationIdsToRemove?: string[];
+  isLocked?: boolean;
 };
 
 export type TripSuggestions = {

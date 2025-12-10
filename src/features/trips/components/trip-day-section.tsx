@@ -6,6 +6,8 @@ import { formatDateForDisplay } from '@/lib/date';
 
 type TripDaySectionProps = {
   day: TripDayWithRelations;
+  guestModeEnabled: boolean;
+  isTripLocked: boolean;
 };
 
 function renderLocations(day: TripDayWithRelations) {
@@ -40,7 +42,7 @@ function renderHashtags(day: TripDayWithRelations) {
   );
 }
 
-export function TripDaySection({ day }: TripDaySectionProps) {
+export function TripDaySection({ day, guestModeEnabled, isTripLocked }: TripDaySectionProps) {
   const hasHighlight = Boolean(day.highlight?.trim());
   const hasJournal = Boolean(day.journal_entry?.trim());
   const hasContent =
@@ -49,6 +51,7 @@ export function TripDaySection({ day }: TripDaySectionProps) {
     (day.trip_locations?.length ?? 0) > 0 ||
     (day.trip_day_hashtags?.length ?? 0) > 0 ||
     (day.photos?.length ?? 0) > 0;
+  const isDayMasked = guestModeEnabled && (isTripLocked || (day.is_locked ?? false));
 
   return (
     <section id={`day-${day.day_index}`} className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
@@ -61,20 +64,20 @@ export function TripDaySection({ day }: TripDaySectionProps) {
       {hasContent ? (
         <div className="space-y-4 text-sm leading-relaxed text-slate-300">
           {renderLocations(day)}
-          {hasHighlight ? (
+          {!isDayMasked && hasHighlight ? (
             <div>
               <p className="font-semibold text-slate-100">Highlight</p>
               <p className="mt-1 text-slate-300">{day.highlight}</p>
             </div>
           ) : null}
-          {hasJournal ? (
+          {!isDayMasked && hasJournal ? (
             <div>
               <p className="font-semibold text-slate-100">Journal</p>
               <p className="mt-1 whitespace-pre-line text-slate-300">{day.journal_entry}</p>
             </div>
           ) : null}
           {renderHashtags(day)}
-          {day.photos?.length ? (
+          {!isDayMasked && day.photos?.length ? (
             <div className="space-y-3">
               <p className="text-sm font-semibold text-white">Photos</p>
               <PhotoGallery photos={day.photos} />

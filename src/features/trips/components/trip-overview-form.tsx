@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
-import { Plus, Search, X } from 'lucide-react';
+import { Lock, Plus, Search, Unlock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { TripOverviewPayload, TripGroupInput } from '@/features/trips/api';
@@ -26,6 +26,11 @@ type TripOverviewFormProps = {
   isSubmitting: boolean;
   onSubmit: (values: TripOverviewFormValues) => Promise<void> | void;
   overlapWarning?: string | null;
+  isTripLocked?: boolean;
+  onToggleTripLock?: () => void | Promise<void>;
+  isTogglingTripLock?: boolean;
+  tripLockMessage?: string | null;
+  tripLockError?: string | null;
 };
 
 export function TripOverviewForm({
@@ -33,7 +38,12 @@ export function TripOverviewForm({
   submitLabel,
   isSubmitting,
   onSubmit,
-  overlapWarning
+  overlapWarning,
+  isTripLocked = false,
+  onToggleTripLock,
+  isTogglingTripLock = false,
+  tripLockMessage,
+  tripLockError
 }: TripOverviewFormProps) {
   const form = useForm<TripOverviewFormValues>({
     defaultValues: initialValues
@@ -208,16 +218,46 @@ export function TripOverviewForm({
     setValue('tripGroupName', tripGroupDraft, { shouldDirty: false });
   }, [tripGroupDraft, setValue]);
 
+  const showLockControls = typeof onToggleTripLock === 'function';
+
   return (
     <>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        {tripLockError ? <p className="text-sm text-red-300">{tripLockError}</p> : null}
+        {tripLockMessage ? <p className="text-sm text-emerald-300">{tripLockMessage}</p> : null}
         <input type="hidden" {...register('tripGroupId')} />
         <input type="hidden" {...register('tripGroupName')} />
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-200">Trip name</label>
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-sm font-medium text-slate-200" htmlFor="trip-name">
+              Trip name
+            </label>
+            {showLockControls ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="flex items-center gap-2"
+                onClick={() => {
+                  void onToggleTripLock?.();
+                }}
+                disabled={isSubmitting || isTogglingTripLock}
+                aria-label={isTripLocked ? 'Unlock trip content' : 'Lock trip content'}
+                title={
+                  isTripLocked
+                    ? 'Trip content is currently locked. Click to unlock.'
+                    : 'Lock trip content so private entries stay hidden in Guest Mode.'
+                }
+              >
+                {isTripLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                {isTripLocked ? 'Unlock trip' : 'Lock trip'}
+              </Button>
+            ) : null}
+          </div>
           <input
             type="text"
+            id="trip-name"
             className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
             placeholder="Trip Name"
             {...register('name', { required: 'Trip name is required', minLength: 2 })}

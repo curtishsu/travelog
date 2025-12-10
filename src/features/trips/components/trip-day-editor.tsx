@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Hash, MapPin, Plus, Search, X } from 'lucide-react';
+import { Hash, Lock, MapPin, Plus, Search, Unlock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { LocationInput } from '@/features/trips/api';
@@ -22,6 +22,7 @@ type TripDayEditorProps = {
   hasNextDay: boolean;
   onNavigateToNext: () => void;
   onNavigateToReflection?: () => void;
+  isTripLocked: boolean;
 };
 
 function areHashtagsEqual(a: string[], b: string[]) {
@@ -43,7 +44,8 @@ export function TripDayEditor({
   day,
   hasNextDay,
   onNavigateToNext,
-  onNavigateToReflection
+  onNavigateToReflection,
+  isTripLocked
 }: TripDayEditorProps) {
   const initialHighlight = day.highlight ?? '';
   const initialJournal = day.journal_entry ?? '';
@@ -59,6 +61,8 @@ export function TripDayEditor({
   const [removedLocationIds, setRemovedLocationIds] = useState<string[]>([]);
   const [pendingLocationsToAdd, setPendingLocationsToAdd] = useState<LocationInput[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isDayLocked, setIsDayLocked] = useState(day.is_locked ?? false);
+  const [lockError, setLockError] = useState<string | null>(null);
   const { mutateAsync, isPending, error } = useUpdateTripDay();
   const queryClient = useQueryClient();
   const { mutateAsync: deletePhotoMutation, isPending: isDeletingPhoto } = useDeletePhoto();
@@ -104,7 +108,9 @@ export function TripDayEditor({
     setRemovedLocationIds([]);
     setPendingLocationsToAdd([]);
     setFeedback(null);
-  }, [initialHighlight, initialJournal, initialHashtags, day.id]);
+    setIsDayLocked(day.is_locked ?? false);
+    setLockError(null);
+  }, [initialHighlight, initialJournal, initialHashtags, day.id, day.is_locked]);
 
   const locations = useMemo(() => {
     const existing = (day.trip_locations ?? []).filter((location) => !removedLocationIds.includes(location.id));
@@ -403,6 +409,33 @@ export function TripDayEditor({
     !areHashtagsEqual(hashtags, initialHashtags) ||
     removedLocationIds.length > 0 ||
     pendingLocationsToAdd.length > 0;
+  const effectiveIsLocked = isTripLocked || isDayLocked;
+
+  async function handleToggleDayLock() {
+    if (isTripLocked) {
+      return;
+    }
+    if (hasChanges) {
+      setLockError('Save this day before changing the lock.');
+      return;
+    }
+    setLockError(null);
+    setFeedback(null);
+    try {
+      const result = await mutateAsync({
+        tripId,
+        dayIndex: day.day_index,
+        payload: {
+          isLocked: !isDayLocked
+        }
+      });
+      setIsDayLocked(result.is_locked ?? !isDayLocked);
+      setFeedback(!isDayLocked ? 'Day locked.' : 'Day unlocked.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update day lock.';
+      setLockError(message);
+    }
+  }
 
   async function handleSave() {
     const shouldNavigateAfterSave = hasNextDay;
@@ -418,6 +451,7 @@ export function TripDayEditor({
     }
 
     setFeedback(null);
+    setLockError(null);
     try {
       const result = await mutateAsync({
         tripId,
@@ -437,6 +471,7 @@ export function TripDayEditor({
       setRemovedLocationIds([]);
       setPendingLocationsToAdd([]);
       setFeedback('Day saved.');
+      setIsDayLocked(result.is_locked ?? isDayLocked);
 
       if (shouldNavigateAfterSave) {
         onNavigateToNext();
@@ -521,14 +556,49 @@ export function TripDayEditor({
 
   const hasLocations = locations.length > 0;
 
+  const lockButtonDisabled = isTripLocked || hasChanges || isPending;
+  const lockButtonLabel = isTripLocked
+    ? 'Trip locked'
+    : isDayLocked
+    ? 'Unlock day'
+    : 'Lock day';
+  const lockButtonTitle = isTripLocked
+    ? 'Trip content lock overrides day locks. Unlock the trip to change this setting.'
+    : hasChanges
+    ? 'Save this day before changing the lock state.'
+    : isDayLocked
+    ? 'Unlock this day'
+    : 'Lock this day';
+
   return (
     <div className="space-y-6">
-      <header>
-        <h2 className="text-xl font-semibold text-white">
-          Day {day.day_index}{' '}
-          <span className="text-sm font-normal text-slate-400">• {formatDateForDisplay(day.date)}</span>
-        </h2>
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold text-white">
+            Day {day.day_index}{' '}
+            <span className="text-sm font-normal text-slate-400">• {formatDateForDisplay(day.date)}</span>
+          </h2>
+          {isTripLocked ? (
+            <p className="text-xs text-slate-400">
+              Trip content is globally locked. Unlock the trip to adjust day-level privacy.
+            </p>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="flex items-center gap-2"
+          onClick={handleToggleDayLock}
+          disabled={lockButtonDisabled}
+          aria-label={lockButtonLabel}
+          title={lockButtonTitle}
+        >
+          {effectiveIsLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+          {lockButtonLabel}
+        </Button>
       </header>
+      {lockError ? <p className="text-sm text-red-300">{lockError}</p> : null}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">

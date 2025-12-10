@@ -29,7 +29,7 @@ export const primaryNavItems: NavItem[] = [
   },
   {
     label: 'Settings',
-    href: '/settings/trip-groups',
+    href: '/settings/privacy',
     icon: 'settings'
   }
 ];

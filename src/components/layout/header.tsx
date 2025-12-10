@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, UserCircle2 } from 'lucide-react';
+import { UserCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +12,6 @@ import { cn } from '@/lib/utils';
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -159,15 +158,6 @@ export function Header() {
               )}
             </div>
           ) : null}
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-200 transition hover:border-slate-500 hover:text-white md:hidden"
-            aria-expanded={isMenuOpen}
-            aria-label="Toggle menu"
-            onClick={() => setIsMenuOpen((prev) => !prev)}
-          >
-            <Menu className="h-5 w-5" />
-          </button>
         </div>
       </div>
     </header>

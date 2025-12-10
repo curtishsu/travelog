@@ -5,23 +5,29 @@ import { formatDateRange } from '@/lib/date';
 
 type TripDetailViewProps = {
   trip: TripDetail;
+  guestModeEnabled: boolean;
 };
 
-export function TripDetailView({ trip }: TripDetailViewProps) {
+export function TripDetailView({ trip, guestModeEnabled }: TripDetailViewProps) {
   const tripTypes = trip.trip_types ?? [];
   const hasTripTypes = tripTypes.length > 0;
+  const isTripLocked = trip.is_trip_content_locked ?? false;
+  const isReflectionLocked = trip.is_reflection_locked ?? false;
+  const isReflectionMasked = guestModeEnabled && (isTripLocked || isReflectionLocked);
 
   // Debug diagnostics to track trip types reaching the detail view
   console.log('[TripDetailView] render', {
     tripId: trip.id,
     tripTypeCount: tripTypes.length,
-    tripTypeValues: tripTypes.map((type) => type.type)
+    tripTypeValues: tripTypes.map((type) => type.type),
+    guestModeEnabled,
+    isTripLocked
   });
 
   return (
     <div className="space-y-10">
       <header className="space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-semibold text-white">{trip.name}</h1>
@@ -50,8 +56,13 @@ export function TripDetailView({ trip }: TripDetailViewProps) {
               </div>
             ) : null}
           </div>
-          <TripDetailActions tripId={trip.id} />
+          <TripDetailActions tripId={trip.id} disabled={guestModeEnabled} />
         </div>
+        {guestModeEnabled ? (
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">
+            Trip Log is locked
+          </div>
+        ) : null}
         {hasTripTypes ? (
           <div className="flex flex-wrap gap-2">
             {tripTypes.map((type) => (
@@ -69,10 +80,20 @@ export function TripDetailView({ trip }: TripDetailViewProps) {
       </header>
       <main className="space-y-6">
         {trip.trip_days.map((day) => (
-          <TripDaySection key={day.id} day={day} />
+          <TripDaySection
+            key={day.id}
+            day={day}
+            guestModeEnabled={guestModeEnabled}
+            isTripLocked={isTripLocked}
+          />
         ))}
       </main>
-      {trip.reflection ? (
+      {isReflectionMasked ? (
+        <section className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
+          <h2 className="text-lg font-semibold text-white">Reflection</h2>
+          <p className="text-sm text-slate-400">Reflection hidden while Guest Mode is enabled.</p>
+        </section>
+      ) : trip.reflection ? (
         <section className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
           <h2 className="text-lg font-semibold text-white">Reflection</h2>
           <p className="text-sm leading-relaxed text-slate-300 whitespace-pre-line">{trip.reflection}</p>

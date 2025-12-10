@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-
 import { TripOverviewForm, type TripOverviewFormValues } from '@/features/trips/components/trip-overview-form';
 import { TripDayEditor } from '@/features/trips/components/trip-day-editor';
 import { TripReflectionForm } from '@/features/trips/components/trip-reflection-form';
@@ -27,6 +26,12 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
   const [overviewSuccess, setOverviewSuccess] = useState<string | null>(null);
   const { data: liveTrip } = useTripDetail(trip.id, trip);
   const { mutateAsync: updateTrip, isPending: isUpdatingTrip, error: overviewError } = useUpdateTrip();
+  const [tripLockMessage, setTripLockMessage] = useState<string | null>(null);
+  const [tripLockError, setTripLockError] = useState<string | null>(null);
+  const [isTogglingTripLock, setIsTogglingTripLock] = useState(false);
+  const [reflectionLockMessage, setReflectionLockMessage] = useState<string | null>(null);
+  const [reflectionLockError, setReflectionLockError] = useState<string | null>(null);
+  const [isTogglingReflectionLock, setIsTogglingReflectionLock] = useState(false);
 
   const tabs = useMemo(() => {
     const dayTabs = (liveTrip?.trip_days ?? []).map((day) => `day-${day.day_index}`);
@@ -34,6 +39,8 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
   }, [liveTrip?.trip_days]);
 
   const activeTrip = liveTrip ?? trip;
+  const isTripLocked = activeTrip.is_trip_content_locked ?? false;
+  const isReflectionLocked = activeTrip.is_reflection_locked ?? false;
 
   const overviewValues: TripOverviewFormValues = useMemo(
     () => ({
@@ -78,6 +85,51 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
     setOverviewSuccess('Trip overview saved.');
   }
 
+  async function handleToggleTripLock() {
+    setTripLockMessage(null);
+    setTripLockError(null);
+    setIsTogglingTripLock(true);
+    try {
+      const result = await updateTrip({
+        tripId: activeTrip.id,
+        payload: { isTripContentLocked: !isTripLocked }
+      });
+      const nextLocked = result.trip.is_trip_content_locked ?? !isTripLocked;
+      setTripLockMessage(nextLocked ? 'Trip content locked.' : 'Trip content unlocked.');
+      if (nextLocked) {
+        setReflectionLockMessage(null);
+        setReflectionLockError(null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update trip lock state.';
+      setTripLockError(message);
+    } finally {
+      setIsTogglingTripLock(false);
+    }
+    }
+
+  async function handleToggleReflectionLock() {
+    if (isTripLocked) {
+      return;
+    }
+    setReflectionLockMessage(null);
+    setReflectionLockError(null);
+    setIsTogglingReflectionLock(true);
+    try {
+      const result = await updateTrip({
+        tripId: activeTrip.id,
+        payload: { isReflectionLocked: !isReflectionLocked }
+      });
+      const nextLocked = result.trip.is_reflection_locked ?? !isReflectionLocked;
+      setReflectionLockMessage(nextLocked ? 'Reflection locked.' : 'Reflection unlocked.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update reflection lock.';
+      setReflectionLockError(message);
+    } finally {
+      setIsTogglingReflectionLock(false);
+    }
+  }
+
   useEffect(() => {
     if (!tabs.includes(activeTab) && tabs.length) {
       setActiveTab(tabs[0]);
@@ -96,6 +148,11 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
             isSubmitting={isUpdatingTrip}
             onSubmit={handleOverviewSubmit}
             overlapWarning={overviewWarning}
+            isTripLocked={isTripLocked}
+            onToggleTripLock={handleToggleTripLock}
+            isTogglingTripLock={isTogglingTripLock || isUpdatingTrip}
+            tripLockMessage={tripLockMessage}
+            tripLockError={tripLockError}
           />
         </div>
       );
@@ -107,6 +164,12 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
           tripId={activeTrip.id}
           initialReflection={activeTrip.reflection}
           onSaved={() => router.push(`/map?trip=${activeTrip.id}`)}
+          isTripLocked={isTripLocked}
+          isReflectionLocked={isReflectionLocked}
+          onToggleLock={handleToggleReflectionLock}
+          lockMessage={reflectionLockMessage}
+          lockError={reflectionLockError}
+          isTogglingLock={isTogglingReflectionLock || isUpdatingTrip}
         />
       );
     }
@@ -126,12 +189,17 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
         hasNextDay={hasNextDay}
         onNavigateToNext={() => setActiveTab(`day-${dayIndex + 1}`)}
         onNavigateToReflection={() => setActiveTab(REFLECTION_TAB)}
+        isTripLocked={isTripLocked}
       />
     );
   }
 
   return (
     <div className="space-y-6">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold text-white">{activeTrip.name}</h1>
+        <p className="text-sm text-slate-400">Manage trip details, daily notes, and privacy locks.</p>
+      </header>
       <nav className="overflow-x-auto">
         <div className="flex gap-2">
           {tabs.map((tab) => {

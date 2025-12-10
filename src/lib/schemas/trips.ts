@@ -37,7 +37,9 @@ export const tripUpdateSchema = z
     reflection: z.string().max(7000).optional(),
     links: z.array(tripLinkSchema).max(20).optional(),
     tripTypes: z.array(tripTypeSchema).max(10).optional(),
-    tripGroupId: z.string().uuid().nullable().optional()
+    tripGroupId: z.string().uuid().nullable().optional(),
+    isTripContentLocked: z.boolean().optional(),
+    isReflectionLocked: z.boolean().optional()
   })
   .refine(
     (data) =>
@@ -47,7 +49,9 @@ export const tripUpdateSchema = z
       data.reflection ||
       data.links ||
       data.tripTypes ||
-      data.tripGroupId !== undefined,
+      data.tripGroupId !== undefined ||
+      data.isTripContentLocked !== undefined ||
+      data.isReflectionLocked !== undefined,
     { message: 'No fields provided for update' }
   );
 
@@ -77,7 +81,8 @@ export const tripDayUpdateSchema = z.object({
       })
     )
     .optional(),
-  locationIdsToRemove: z.array(z.string().uuid()).optional()
+  locationIdsToRemove: z.array(z.string().uuid()).optional(),
+  isLocked: z.boolean().optional()
 });
 
 export const photoCreateSchema = z.object({

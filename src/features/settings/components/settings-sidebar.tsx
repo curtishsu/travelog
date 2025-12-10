@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const settingsNavItems = [
+  { href: '/settings/privacy', label: 'Privacy & Guest Mode' },
   { href: '/settings/trip-groups', label: 'Trip Groups' }
 ] as const;
 

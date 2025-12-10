@@ -29,17 +29,26 @@ export type TrendTravelDayBucket = {
   tripDays: TravelDayDetail[];
 };
 
+export type MostVisitedLocationSummary = {
+  city: string | null;
+  country: string | null;
+  tripCount: number;
+  daysHere: number;
+};
+
+export type MostVisitedSummary =
+  | {
+      trips: MostVisitedLocationSummary[];
+      days: MostVisitedLocationSummary[];
+    }
+  | null;
+
 export type StatsSummary = {
   totalTrips: number;
   totalTravelDays: number;
   countriesVisited: number;
   locationsVisited: number;
-  mostVisitedLocation: {
-    city: string | null;
-    country: string | null;
-    tripCount: number;
-    daysHere: number;
-  } | null;
+  mostVisited: MostVisitedSummary;
   hashtagDistribution: Array<{ hashtag: string; dayCount: number; tripDays: HashtagTripDaySummary[] }>;
   tripTypeDistribution: Array<{ type: string; tripCount: number; trips: TripTypeSummary[] }>;
   tripTrendsYear: TrendTripBucket[];

@@ -15,6 +15,8 @@ export type Database = {
           created_at: string;
           updated_at: string;
           trip_group_id: string | null;
+          is_trip_content_locked: boolean;
+          is_reflection_locked: boolean;
         };
         Insert: {
           id?: string;
@@ -27,6 +29,8 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           trip_group_id?: string | null;
+          is_trip_content_locked?: boolean;
+          is_reflection_locked?: boolean;
         };
         Update: Partial<Database['public']['Tables']['trips']['Insert']>;
       };
@@ -57,6 +61,7 @@ export type Database = {
           journal_entry: string | null;
           created_at: string;
           updated_at: string;
+          is_locked: boolean;
         };
         Insert: {
           id?: string;
@@ -67,6 +72,7 @@ export type Database = {
           journal_entry?: string | null;
           created_at?: string;
           updated_at?: string;
+          is_locked?: boolean;
         };
         Update: Partial<Database['public']['Tables']['trip_days']['Insert']>;
       };
@@ -185,6 +191,21 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database['public']['Tables']['trip_group_members']['Insert']>;
+      };
+      user_settings: {
+        Row: {
+          user_id: string;
+          guest_mode_enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          guest_mode_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['user_settings']['Insert']>;
       };
     };
     Functions: {

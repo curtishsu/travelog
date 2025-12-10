@@ -11,7 +11,7 @@ const iconMap = {
   '/trips/new': PlusCircle,
   '/map': Globe2,
   '/stats': BarChart3,
-  '/settings/trip-groups': Settings
+  '/settings/privacy': Settings
 } as const;
 
 const items = [
@@ -19,7 +19,7 @@ const items = [
   { href: '/trips/new', label: 'Add Trip' },
   { href: '/map', label: 'Globe' },
   { href: '/stats', label: 'Stats' },
-  { href: '/settings/trip-groups', label: 'Settings' }
+  { href: '/settings/privacy', label: 'Settings' }
 ] as const;
 
 export function MobileNav() {

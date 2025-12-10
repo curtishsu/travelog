@@ -79,6 +79,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     updates.journal_entry = parseResult.data.journalEntry;
   }
 
+  if (parseResult.data.isLocked !== undefined) {
+    updates.is_locked = parseResult.data.isLocked;
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tripDaysTable = supabase.from('trip_days') as any;

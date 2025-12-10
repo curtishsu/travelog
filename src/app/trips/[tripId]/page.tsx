@@ -6,7 +6,7 @@ type TripDetailPageProps = {
 };
 
 export default async function TripDetailPage({ params }: TripDetailPageProps) {
-  const trip = await loadTripDetail(params.tripId);
-  return <TripDetailView trip={trip} />;
+  const { trip, guestModeEnabled } = await loadTripDetail(params.tripId);
+  return <TripDetailView trip={trip} guestModeEnabled={guestModeEnabled} />;
 }
 

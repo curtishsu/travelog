@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent, ReactNode, RefObject } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { StatsSummary } from '@/features/stats/types';
@@ -47,6 +47,60 @@ type TrendExpandedSections = Record<string, { trips?: boolean; tripDays?: boolea
 export function StatsDashboard({ stats }: StatsDashboardProps) {
   const [distributionType, setDistributionType] = useState<'hashtags' | 'tripTypes'>('tripTypes');
   const [trendGrouping, setTrendGrouping] = useState<'year' | 'month'>('year');
+  const [mostVisitedMetric, setMostVisitedMetric] = useState<'trips' | 'days'>('trips');
+  const [mostVisitedIndices, setMostVisitedIndices] = useState<Record<'trips' | 'days', number>>({
+    trips: 0,
+    days: 0
+  });
+  const [isNarrowScreen, setIsNarrowScreen] = useState(false);
+
+  const mostVisitedTrips = stats.mostVisited?.trips ?? [];
+  const mostVisitedDays = stats.mostVisited?.days ?? [];
+  const availableMostVisitedMetrics = useMemo(() => {
+    const metrics: Array<'trips' | 'days'> = [];
+    if (mostVisitedTrips.length > 0) {
+      metrics.push('trips');
+    }
+    if (mostVisitedDays.length > 0) {
+      metrics.push('days');
+    }
+    return metrics;
+  }, [mostVisitedTrips.length, mostVisitedDays.length]);
+
+  useEffect(() => {
+    const preferred = availableMostVisitedMetrics[0] ?? 'trips';
+    setMostVisitedMetric(preferred);
+    setMostVisitedIndices({ trips: 0, days: 0 });
+  }, [availableMostVisitedMetrics]);
+
+  useEffect(() => {
+    const query =
+      typeof window !== 'undefined' ? window.matchMedia('(max-width: 640px)') : null;
+    if (!query) {
+      return;
+    }
+
+    const handleMatch = (event: MediaQueryListEvent | MediaQueryList) => {
+      setIsNarrowScreen(event.matches);
+    };
+
+    handleMatch(query);
+
+    const listener = (event: MediaQueryListEvent) => handleMatch(event);
+    if (typeof query.addEventListener === 'function') {
+      query.addEventListener('change', listener);
+      return () => {
+        query.removeEventListener('change', listener);
+      };
+    }
+
+    const legacyListener = (event: MediaQueryListEvent) => handleMatch(event);
+    query.addListener(legacyListener);
+
+    return () => {
+      query.removeListener(legacyListener);
+    };
+  }, []);
 
   const tripTypeData: TripTypeDistributionItem[] = useMemo(() => {
     return stats.tripTypeDistribution.map((item) => ({
@@ -93,6 +147,65 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
     ? tripTypeData
     : hashtagData;
   const maxDistributionValue = distributionData.reduce((max, item) => Math.max(max, item.value), 0) || 1;
+  const hasMostVisited = mostVisitedTrips.length > 0 || mostVisitedDays.length > 0;
+
+  const activeMostVisitedList =
+    mostVisitedMetric === 'trips' ? mostVisitedTrips : mostVisitedDays;
+  const activeMostVisitedIndex = Math.min(
+    mostVisitedIndices[mostVisitedMetric] ?? 0,
+    Math.max(activeMostVisitedList.length - 1, 0)
+  );
+  const activeMostVisitedLocation = activeMostVisitedList[activeMostVisitedIndex];
+  const showMostVisitedTie = activeMostVisitedList.length > 1;
+  const mostVisitedMetricLabel = mostVisitedMetric === 'trips' ? 'Trips' : 'Days';
+
+  useEffect(() => {
+    setMostVisitedIndices((previous) => {
+      const updated: Record<'trips' | 'days', number> = { ...previous };
+      for (const key of ['trips', 'days'] as const) {
+        const list = key === 'trips' ? mostVisitedTrips : mostVisitedDays;
+        if (list.length === 0) {
+          updated[key] = 0;
+        } else if (updated[key] >= list.length) {
+          updated[key] = 0;
+        }
+      }
+      return updated;
+    });
+  }, [mostVisitedTrips, mostVisitedDays]);
+
+  const handleMostVisitedToggle = () => {
+    if (availableMostVisitedMetrics.length === 0) {
+      return;
+    }
+
+    const metric = mostVisitedMetric;
+    const entries = metric === 'trips' ? mostVisitedTrips : mostVisitedDays;
+    if (entries.length === 0) {
+      return;
+    }
+
+    const currentIndex = mostVisitedIndices[metric] ?? 0;
+    const nextIndex = (currentIndex + 1) % entries.length;
+    const wrapped = nextIndex === 0;
+
+    setMostVisitedIndices((previous) => ({
+      ...previous,
+      [metric]: nextIndex
+    }));
+
+    if (!wrapped || availableMostVisitedMetrics.length === 1) {
+      return;
+    }
+
+    const metricIndex = availableMostVisitedMetrics.indexOf(metric);
+    const nextMetric =
+      metricIndex === -1
+        ? availableMostVisitedMetrics[0]
+        : availableMostVisitedMetrics[(metricIndex + 1) % availableMostVisitedMetrics.length];
+
+    setMostVisitedMetric(nextMetric);
+  };
 
   return (
     <div className="space-y-8">
@@ -103,22 +216,57 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
           <SummaryCard title="Countries visited" value={stats.countriesVisited.toString()} />
           <SummaryCard title="Locations visited" value={stats.locationsVisited.toString()} />
         </div>
-        {stats.mostVisitedLocation ? (
-          <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-900/40 p-5 text-sm text-slate-300">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Most visited</p>
-            <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-lg font-semibold text-white">
-                {[stats.mostVisitedLocation.city, stats.mostVisitedLocation.country].filter(Boolean).join(', ')}
-              </p>
-              <p className="text-xs text-slate-400">
-                [{stats.mostVisitedLocation.daysHere}] days here
-              </p>
-            </div>
-            <p className="text-xs text-slate-400">
-              Visited on {stats.mostVisitedLocation.tripCount}{' '}
-              {stats.mostVisitedLocation.tripCount === 1 ? 'trip' : 'trips'}
+        {hasMostVisited ? (
+          <button
+            type="button"
+            onClick={handleMostVisitedToggle}
+            className="mt-4 w-full rounded-3xl border border-slate-800 bg-slate-900/40 p-5 text-left text-sm text-slate-300 transition hover:border-slate-700 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
+            aria-label="Toggle most visited metric"
+          >
+            <p className="text-xs uppercase tracking-wide text-slate-500">
+              Most visited ({mostVisitedMetricLabel})
             </p>
-          </div>
+            {activeMostVisitedLocation ? (
+              <>
+                <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-lg font-semibold text-white">
+                    {[
+                      activeMostVisitedLocation.city,
+                      activeMostVisitedLocation.country
+                    ]
+                      .filter(Boolean)
+                      .join(', ') || 'Unknown location'}
+                    {showMostVisitedTie ? ' (Tie)' : ''}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {mostVisitedMetric === 'trips'
+                      ? `${activeMostVisitedLocation.tripCount} ${
+                          activeMostVisitedLocation.tripCount === 1 ? 'trip' : 'trips'
+                        }`
+                      : `${activeMostVisitedLocation.daysHere} ${
+                          activeMostVisitedLocation.daysHere === 1 ? 'day' : 'days'
+                        }`}
+                  </p>
+                </div>
+                <p className="text-xs text-slate-400">
+                  {mostVisitedMetric === 'trips'
+                    ? `${activeMostVisitedLocation.daysHere} ${
+                        activeMostVisitedLocation.daysHere === 1 ? 'day' : 'days'
+                      } spent`
+                    : `${activeMostVisitedLocation.tripCount} ${
+                        activeMostVisitedLocation.tripCount === 1 ? 'trip' : 'trips'
+                      } logged`}
+                </p>
+                {availableMostVisitedMetrics.length > 1 || showMostVisitedTie ? (
+                  <p className="mt-3 text-[11px] font-semibold uppercase text-brand">
+                    Tap to switch
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">No most visited locations yet.</p>
+            )}
+          </button>
         ) : null}
       </section>
 
@@ -268,6 +416,7 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
             data={travelDayTrendData}
             variant="days"
             emptyMessage={`No travel day history per ${groupingLabel} yet.`}
+            shouldCompressLabels={isNarrowScreen && trendGrouping === 'month'}
           />
         </div>
       </section>
@@ -293,19 +442,92 @@ function Tooltip({ trigger, children, align = 'center' }: TooltipProps) {
       : align === 'right'
       ? 'right-0'
       : 'left-1/2 -translate-x-1/2';
-  const tooltipClasses = `pointer-events-none absolute top-full z-30 hidden min-w-[14rem] max-w-xs translate-y-2 rounded-xl border border-slate-700 bg-slate-900/95 p-3 text-left text-xs text-slate-100 shadow-xl transition group-hover:pointer-events-auto group-hover:block group-focus-within:pointer-events-auto group-focus-within:block ${positionClasses}`;
+  const [isOpen, setIsOpen] = useState(false);
+  const closeTimeoutRef = useRef<number | null>(null);
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+
+  const clearCloseTimeout = () => {
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  };
+
+  const openTooltip = () => {
+    clearCloseTimeout();
+    setIsOpen(true);
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimeout();
+    closeTimeoutRef.current = window.setTimeout(() => {
+      setIsOpen(false);
+    }, 180);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearCloseTimeout();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        (triggerRef.current && triggerRef.current.contains(target)) ||
+        (tooltipRef.current && tooltipRef.current.contains(target))
+      ) {
+        return;
+      }
+      setIsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [isOpen]);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === 'Escape') {
+      clearCloseTimeout();
+      setIsOpen(false);
+    }
+  };
 
   return (
-    <div className="group relative inline-flex">
+    <div className="relative inline-flex">
       <span
+        ref={triggerRef}
         tabIndex={0}
         className="cursor-help focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
+        onMouseEnter={openTooltip}
+        onMouseLeave={scheduleClose}
+        onFocus={openTooltip}
+        onBlur={scheduleClose}
+        onTouchStart={openTooltip}
+        onClick={openTooltip}
+        onKeyDown={handleKeyDown}
       >
         {trigger}
       </span>
-      <div className={tooltipClasses} role="tooltip">
-        <div className="max-h-64 overflow-y-auto">{children}</div>
-      </div>
+      {isOpen ? (
+        <div
+          ref={tooltipRef}
+          className={`absolute top-full z-30 mt-2 min-w-[14rem] max-w-xs -translate-y-1 rounded-xl border border-slate-700 bg-slate-900/95 p-3 text-left text-xs text-slate-100 shadow-xl transition ${positionClasses}`}
+          role="tooltip"
+          onMouseEnter={openTooltip}
+          onMouseLeave={scheduleClose}
+        >
+          <div className="max-h-64 overflow-y-auto">{children}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -319,25 +541,39 @@ function SummaryCard({ title, value }: SummaryCardProps) {
   );
 }
 
+type BaseTrendChartProps = {
+  title: string;
+  emptyMessage: string;
+  shouldCompressLabels?: boolean;
+};
+
 type TrendChartProps =
-  | {
-      title: string;
+  | (BaseTrendChartProps & {
       variant: 'trips';
       data: TripTrendPoint[];
-      emptyMessage: string;
-    }
-  | {
-      title: string;
+    })
+  | (BaseTrendChartProps & {
       variant: 'days';
       data: TravelDayTrendPoint[];
-      emptyMessage: string;
-    };
+    });
 
-type RenderableTripPoint = TripTrendPoint & { value: number; x: number; y: number };
-type RenderableTravelDayPoint = TravelDayTrendPoint & { value: number; x: number; y: number };
+type RenderableTripPoint = TripTrendPoint & {
+  value: number;
+  x: number;
+  y: number;
+  xPercent: number;
+  yPercent: number;
+};
+type RenderableTravelDayPoint = TravelDayTrendPoint & {
+  value: number;
+  x: number;
+  y: number;
+  xPercent: number;
+  yPercent: number;
+};
 
 function TrendChart(props: TrendChartProps) {
-  const { title, variant, data, emptyMessage } = props;
+  const { title, variant, data, emptyMessage, shouldCompressLabels = false } = props;
 
   const valueLabel = variant === 'trips' ? 'Trips' : 'Trip days';
   const hasData = data.length > 0;
@@ -346,6 +582,8 @@ function TrendChart(props: TrendChartProps) {
   const chartHeight = 60;
   const verticalPadding = 10;
   const baselineY = chartHeight - verticalPadding;
+
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const values =
     variant === 'trips'
@@ -357,6 +595,23 @@ function TrendChart(props: TrendChartProps) {
   const [pinnedBucket, setPinnedBucket] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<TrendExpandedSections>({});
 
+  const visibleLabelSet = useMemo(() => {
+    if (!shouldCompressLabels || data.length <= 8) {
+      return new Set(data.map((_, index) => index));
+    }
+    const maxLabels = Math.min(5, data.length);
+    const step = Math.max(1, Math.ceil(data.length / maxLabels));
+    const indices = new Set<number>();
+
+    data.forEach((_, index) => {
+      if (index === 0 || index === data.length - 1 || index % step === 0) {
+        indices.add(index);
+      }
+    });
+
+    return indices;
+  }, [data, shouldCompressLabels]);
+
   const renderablePoints: Array<RenderableTripPoint | RenderableTravelDayPoint> = hasData
     ? data.map((point, index) => {
         const rawValue =
@@ -366,7 +621,9 @@ function TrendChart(props: TrendChartProps) {
         const x = data.length === 1 ? chartWidth / 2 : (index / (data.length - 1)) * chartWidth;
         const ratio = maxValue ? rawValue / maxValue : 0;
         const y = baselineY - ratio * (chartHeight - verticalPadding * 2);
-        return { ...point, value: rawValue, x, y };
+        const xPercent = chartWidth ? (x / chartWidth) * 100 : 0;
+        const yPercent = chartHeight ? (y / chartHeight) * 100 : 0;
+        return { ...point, value: rawValue, x, y, xPercent, yPercent };
       })
     : [];
 
@@ -420,6 +677,27 @@ function TrendChart(props: TrendChartProps) {
     }
   };
 
+  useEffect(() => {
+    if (!pinnedBucket) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!chartContainerRef.current) {
+        return;
+      }
+      if (chartContainerRef.current.contains(event.target as Node)) {
+        return;
+      }
+      setPinnedBucket(null);
+      setActiveBucket(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [pinnedBucket]);
+
   const isExpanded = (bucket: string, section: 'trips' | 'tripDays') =>
     expandedSections[bucket]?.[section] ?? false;
 
@@ -449,7 +727,11 @@ function TrendChart(props: TrendChartProps) {
       </div>
       {hasData ? (
         <div className="space-y-4">
-          <div className="relative h-40 w-full" onMouseLeave={handleChartLeave}>
+          <div
+            ref={chartContainerRef}
+            className="relative h-40 w-full"
+            onMouseLeave={handleChartLeave}
+          >
             <svg
               viewBox={`0 0 ${chartWidth} ${chartHeight}`}
               preserveAspectRatio="none"
@@ -473,8 +755,8 @@ function TrendChart(props: TrendChartProps) {
               ))}
             </svg>
             {renderablePoints.map((point) => {
-              const left = `${point.x}%`;
-              const top = `${point.y}%`;
+              const left = `${point.xPercent}%`;
+              const top = `${point.yPercent}%`;
               const isPinned = pinnedBucket === point.bucket;
               const isActive = bucketKey === point.bucket;
 
@@ -506,6 +788,7 @@ function TrendChart(props: TrendChartProps) {
                   valueLabel={valueLabel}
                   isTripsExpanded={isExpanded(activePoint.bucket, 'trips')}
                   onToggleTrips={() => toggleExpanded(activePoint.bucket, 'trips')}
+                  containerRef={chartContainerRef}
                 />
               ) : (
                 <TrendTooltipPanel
@@ -516,6 +799,7 @@ function TrendChart(props: TrendChartProps) {
                   onToggleTrips={() => toggleExpanded(activePoint.bucket, 'trips')}
                   isTripDaysExpanded={isExpanded(activePoint.bucket, 'tripDays')}
                   onToggleTripDays={() => toggleExpanded(activePoint.bucket, 'tripDays')}
+                  containerRef={chartContainerRef}
                 />
               )
             ) : null}
@@ -524,11 +808,18 @@ function TrendChart(props: TrendChartProps) {
             className="grid gap-2 text-xs text-slate-400"
             style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}
           >
-            {data.map((point) => (
-              <span key={point.bucket} className="text-center font-medium">
-                {point.label}
-              </span>
-            ))}
+            {data.map((point, index) => {
+              const isVisible = visibleLabelSet.has(index);
+              return (
+                <span
+                  key={point.bucket}
+                  className={`text-center font-medium ${isVisible ? '' : 'text-transparent'}`}
+                  aria-hidden={!isVisible}
+                >
+                  {point.label}
+                </span>
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -545,6 +836,7 @@ type TrendTooltipPanelProps =
       valueLabel: string;
       isTripsExpanded: boolean;
       onToggleTrips: () => void;
+      containerRef: RefObject<HTMLDivElement>;
       isTripDaysExpanded?: never;
       onToggleTripDays?: never;
     }
@@ -554,15 +846,156 @@ type TrendTooltipPanelProps =
       valueLabel: string;
       isTripsExpanded: boolean;
       onToggleTrips: () => void;
+      containerRef: RefObject<HTMLDivElement>;
       isTripDaysExpanded: boolean | undefined;
       onToggleTripDays: (() => void) | undefined;
     };
 
 function TrendTooltipPanel(props: TrendTooltipPanelProps) {
-  const { variant, point, valueLabel } = props;
+  const { variant, point, valueLabel, containerRef } = props;
 
-  const clampedX = Math.min(Math.max(point.x, 12), 88);
-  const topTarget = Math.max(point.y, 18);
+  type TooltipPlacement = 'above' | 'below';
+  type TooltipPosition = {
+    left: number;
+    top: number;
+    placement: TooltipPlacement;
+    ready: boolean;
+    maxHeight: number;
+  };
+
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const tripDayCount = 'tripDays' in point ? point.tripDays.length : 0;
+  const [position, setPosition] = useState<TooltipPosition>({
+    left: 0,
+    top: 0,
+    placement: 'above',
+    ready: false,
+    maxHeight: 0
+  });
+
+  const calculatePosition = useCallback(() => {
+    const container = containerRef.current;
+    const tooltipEl = tooltipRef.current;
+    if (!container || !tooltipEl) {
+      return;
+    }
+
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    if (containerWidth === 0 || containerHeight === 0) {
+      return;
+    }
+
+    const tooltipWidth = tooltipEl.offsetWidth;
+    const tooltipHeight = tooltipEl.offsetHeight;
+    const containerRect = container.getBoundingClientRect();
+
+    const pointX = (point.xPercent / 100) * containerWidth;
+    const pointY = (point.yPercent / 100) * containerHeight;
+
+    const horizontalPadding = 12;
+    const pointGap = 12;
+    const viewportPadding = 12;
+
+    let left = pointX - tooltipWidth / 2;
+    left = Math.max(horizontalPadding, Math.min(left, containerWidth - horizontalPadding - tooltipWidth));
+
+    const naturalTop = pointY - tooltipHeight - pointGap;
+    let placement: TooltipPlacement = 'above';
+
+    const viewportTopLimit = viewportPadding;
+    const viewportBottomLimit = window.innerHeight - viewportPadding;
+
+    const naturalViewportTop = containerRect.top + naturalTop;
+    const naturalViewportBottom = naturalViewportTop + tooltipHeight;
+
+    const availableViewportHeight = Math.max(
+      viewportBottomLimit - viewportTopLimit,
+      200
+    );
+
+    const desiredViewportTop = Math.min(
+      Math.max(naturalViewportTop, viewportTopLimit),
+      viewportBottomLimit - tooltipHeight
+    );
+
+    let finalViewportTop = desiredViewportTop;
+    let maxHeight = tooltipHeight;
+
+    if (naturalViewportBottom > viewportBottomLimit) {
+      placement = 'above';
+      const adjustedHeight = Math.min(
+        tooltipHeight,
+        viewportBottomLimit - viewportTopLimit
+      );
+      finalViewportTop = Math.max(viewportTopLimit, naturalViewportBottom - adjustedHeight);
+      maxHeight = adjustedHeight;
+    } else if (naturalViewportTop < viewportTopLimit) {
+      placement = 'above';
+      const adjustedHeight = Math.min(
+        tooltipHeight,
+        viewportBottomLimit - viewportTopLimit
+      );
+      finalViewportTop = viewportTopLimit;
+      maxHeight = adjustedHeight;
+    } else {
+      maxHeight = Math.min(tooltipHeight, availableViewportHeight);
+    }
+
+    const top = finalViewportTop - containerRect.top;
+
+    setPosition((previous) => {
+      const hasChanged =
+        Math.abs(previous.left - left) > 0.5 ||
+        Math.abs(previous.top - top) > 0.5 ||
+        previous.placement !== placement ||
+        Math.abs(previous.maxHeight - maxHeight) > 0.5 ||
+        !previous.ready;
+
+      if (!hasChanged) {
+        return previous;
+      }
+
+      return {
+        left,
+        top,
+        placement,
+        ready: true,
+        maxHeight
+      };
+    });
+  }, [
+    containerRef,
+    point.xPercent,
+    point.yPercent,
+    point.trips.length,
+    tripDayCount,
+    props.isTripsExpanded,
+    props.isTripDaysExpanded
+  ]);
+
+  useLayoutEffect(() => {
+    calculatePosition();
+  }, [calculatePosition]);
+
+  useEffect(() => {
+    if (!position.ready) {
+      return;
+    }
+    const handleResize = () => calculatePosition();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [calculatePosition, position.ready]);
+
+  const commonStyle = {
+    left: `${position.left}px`,
+    top: `${position.top}px`,
+    opacity: position.ready ? 1 : 0,
+    pointerEvents: position.ready ? 'auto' : 'none',
+    maxHeight: position.maxHeight ? `${position.maxHeight}px` : undefined
+  } as const;
 
   if (variant === 'trips') {
     const showToggle = point.trips.length > 3;
@@ -572,77 +1005,20 @@ function TrendTooltipPanel(props: TrendTooltipPanelProps) {
 
     return (
       <div
-        className="absolute z-30 w-72 max-w-xs -translate-x-1/2 -translate-y-[110%] rounded-2xl border border-slate-700 bg-slate-900/95 p-4 text-xs text-slate-100 shadow-xl"
-        style={{ left: `${clampedX}%`, top: `${topTarget}%` }}
+        ref={tooltipRef}
+        className="absolute z-30 w-72 max-w-xs overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/95 text-xs text-slate-100 shadow-xl transition"
+        data-placement={position.placement}
+        style={commonStyle}
       >
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-white">{point.label}</p>
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">{valueLabel}</p>
-            <p className="text-sm font-semibold text-white">{point.value}</p>
-          </div>
-          <div className="space-y-2">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Trips in bucket</p>
-            <ul className="space-y-1 text-left text-slate-200">
-              {tripsToShow.map((trip) => (
-                <li key={trip.tripId}>
-                  <Link
-                    href={`/trips/${trip.tripId}`}
-                    className="text-brand hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
-                  >
-                    {trip.tripName}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {showToggle ? (
-              <button
-                type="button"
-                className="text-[11px] font-semibold uppercase text-brand hover:underline"
-                onClick={props.onToggleTrips}
-              >
-                {isExpanded ? 'See less' : `See more (${remainingTrips} more)`}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const showTripToggle = point.trips.length > 3;
-  const showTripDaysToggle = point.tripDays.length > 3;
-  const tripsExpanded = props.isTripsExpanded;
-  const tripDaysExpanded = props.isTripDaysExpanded ?? false;
-  const tripsToShow = showTripToggle && !tripsExpanded ? point.trips.slice(0, 3) : point.trips;
-  const tripDaysToShow =
-    showTripDaysToggle && !tripDaysExpanded ? point.tripDays.slice(0, 3) : point.tripDays;
-  const remainingTrips = point.trips.length - tripsToShow.length;
-  const remainingTripDays = point.tripDays.length - tripDaysToShow.length;
-
-  return (
-    <div
-      className="absolute z-30 w-80 max-w-xs -translate-x-1/2 -translate-y-[110%] rounded-2xl border border-slate-700 bg-slate-900/95 p-4 text-xs text-slate-100 shadow-xl"
-      style={{ left: `${clampedX}%`, top: `${topTarget}%` }}
-    >
-      <div className="space-y-3">
-        <p className="text-sm font-semibold text-white">{point.label}</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">{valueLabel}</p>
-            <p className="text-sm font-semibold text-white">{point.value}</p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Trips</p>
-            <p className="text-sm font-semibold text-white">{point.trips.length}</p>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <p className="text-[10px] uppercase tracking-wide text-slate-500">Trips in bucket</p>
-          {point.trips.length === 0 ? (
-            <p className="text-slate-400">No trips yet.</p>
-          ) : (
-            <>
+        <div className="max-h-full overflow-y-auto p-4 pr-3">
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-white">{point.label}</p>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">{valueLabel}</p>
+              <p className="text-sm font-semibold text-white">{point.value}</p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Trips in bucket</p>
               <ul className="space-y-1 text-left text-slate-200">
                 {tripsToShow.map((trip) => (
                   <li key={trip.tripId}>
@@ -655,47 +1031,115 @@ function TrendTooltipPanel(props: TrendTooltipPanelProps) {
                   </li>
                 ))}
               </ul>
-              {showTripToggle ? (
+              {showToggle ? (
                 <button
                   type="button"
                   className="text-[11px] font-semibold uppercase text-brand hover:underline"
                   onClick={props.onToggleTrips}
                 >
-                  {tripsExpanded ? 'See less' : `See more (${remainingTrips} more)`}
+                  {isExpanded ? 'See less' : `See more (${remainingTrips} more)`}
                 </button>
               ) : null}
-            </>
-          )}
+            </div>
+          </div>
         </div>
-        <div className="space-y-2">
-          <p className="text-[10px] uppercase tracking-wide text-slate-500">Trip days</p>
-          {point.tripDays.length === 0 ? (
-            <p className="text-slate-400">No trip days yet.</p>
-          ) : (
-            <>
-              <ul className="space-y-1 text-left text-slate-200">
-                {tripDaysToShow.map((entry) => (
-                  <li key={`${entry.tripId}-${entry.dayIndex}-${entry.date}`}>
-                    <Link
-                      href={`/trips/${entry.tripId}#day-${entry.dayIndex}`}
-                      className="text-brand hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
-                    >
-                      {entry.tripName} [Day {entry.dayIndex}] • {formatDateForDisplay(entry.date)}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              {showTripDaysToggle && props.onToggleTripDays ? (
+      </div>
+    );
+  }
+
+  const showTripToggle = point.trips.length > 3;
+  const showTripDaysToggle = point.tripDays.length > 0;
+  const tripsExpanded = props.isTripsExpanded;
+  const tripDaysExpanded = props.isTripDaysExpanded ?? false;
+  const tripsToShow = showTripToggle && !tripsExpanded ? point.trips.slice(0, 3) : point.trips;
+  const remainingTrips = point.trips.length - tripsToShow.length;
+
+  return (
+    <div
+      ref={tooltipRef}
+      className="absolute z-30 w-80 max-w-xs overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/95 text-xs text-slate-100 shadow-xl transition"
+      data-placement={position.placement}
+      style={commonStyle}
+    >
+      <div className="max-h-full overflow-y-auto p-4 pr-3">
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">{point.label}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">{valueLabel}</p>
+              <p className="text-sm font-semibold text-white">{point.value}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Trips</p>
+              <p className="text-sm font-semibold text-white">{point.trips.length}</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">Trips in bucket</p>
+            {point.trips.length === 0 ? (
+              <p className="text-slate-400">No trips yet.</p>
+            ) : (
+              <>
+                <ul className="space-y-1 text-left text-slate-200">
+                  {tripsToShow.map((trip) => (
+                    <li key={trip.tripId}>
+                      <Link
+                        href={`/trips/${trip.tripId}`}
+                        className="text-brand hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
+                      >
+                        {trip.tripName}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {showTripToggle ? (
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold uppercase text-brand hover:underline"
+                    onClick={props.onToggleTrips}
+                  >
+                    {tripsExpanded ? 'See less' : `See more (${remainingTrips} more)`}
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+          {showTripDaysToggle && props.onToggleTripDays ? (
+            <div className="space-y-2">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Trip days</p>
+              {tripDaysExpanded ? (
+                <>
+                  <ul className="space-y-1 text-left text-slate-200">
+                    {point.tripDays.map((entry) => (
+                      <li key={`${entry.tripId}-${entry.dayIndex}-${entry.date}`}>
+                        <Link
+                          href={`/trips/${entry.tripId}#day-${entry.dayIndex}`}
+                          className="text-brand hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
+                        >
+                          {entry.tripName} [Day {entry.dayIndex}] • {formatDateForDisplay(entry.date)}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold uppercase text-brand hover:underline"
+                    onClick={props.onToggleTripDays}
+                  >
+                    See less
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
                   className="text-[11px] font-semibold uppercase text-brand hover:underline"
                   onClick={props.onToggleTripDays}
                 >
-                  {tripDaysExpanded ? 'See less' : `See more (${remainingTripDays} more)`}
+                  See trip ({point.tripDays.length})
                 </button>
-              ) : null}
-            </>
-          )}
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

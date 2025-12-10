@@ -104,7 +104,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/dark-v11',
       projection: 'globe',
-      zoom: 1.8,
+      zoom: 3.2,
       center: [0, 20]
     });
     map.addControl(new mapboxgl.NavigationControl());
@@ -165,9 +165,11 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       markersRef.current.push(marker);
     });
 
-    if (groups.length) {
+    const validGroups = groups.filter((group) => Number.isFinite(group.lng) && Number.isFinite(group.lat));
+
+    if (validGroups.length) {
       const bounds = new mapboxgl.LngLatBounds();
-      groups.forEach((group) => bounds.extend([group.lng, group.lat]));
+      validGroups.forEach((group) => bounds.extend([group.lng, group.lat]));
       map.fitBounds(bounds, { padding: 100, maxZoom: 5.2 });
     }
   }, [groups, mode, mapLoaded]);

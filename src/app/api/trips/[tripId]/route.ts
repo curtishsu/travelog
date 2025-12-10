@@ -6,6 +6,8 @@ import { badRequest, noContent, notFound, ok, serverError, unauthorized } from '
 import { tripUpdateSchema } from '@/lib/schemas/trips';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 import { deriveTripStatus } from '@/lib/trips/status';
+import { normalizeTripDetail } from '@/features/trips/privacy';
+import type { TripDetail } from '@/features/trips/types';
 import type { Database } from '@/types/database';
 
 type TripDayInsert = Database['public']['Tables']['trip_days']['Insert'];
@@ -62,7 +64,9 @@ export async function GET(_: NextRequest, context: { params: { tripId: string } 
     return notFound('Trip not found');
   }
 
-  return ok({ trip: data });
+  const trip = normalizeTripDetail(data as TripDetail);
+
+  return ok({ trip });
 }
 
 export async function PATCH(request: NextRequest, context: { params: { tripId: string } }) {
@@ -136,6 +140,14 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
 
   if (parseResult.data.reflection !== undefined) {
     updates.reflection = parseResult.data.reflection;
+  }
+
+  if (parseResult.data.isTripContentLocked !== undefined) {
+    updates.is_trip_content_locked = parseResult.data.isTripContentLocked;
+  }
+
+  if (parseResult.data.isReflectionLocked !== undefined) {
+    updates.is_reflection_locked = parseResult.data.isReflectionLocked;
   }
 
   const relatedUpdateTasks: Array<() => Promise<void>> = [];

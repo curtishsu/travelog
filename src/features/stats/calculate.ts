@@ -52,7 +52,7 @@ export async function calculateStats(
       totalTravelDays: 0,
       countriesVisited: 0,
       locationsVisited: 0,
-      mostVisitedLocation: null,
+      mostVisited: null,
       hashtagDistribution: [],
       tripTypeDistribution: [],
       tripTrendsYear: [],
@@ -181,41 +181,82 @@ export async function calculateStats(
     }
   }
 
-  let topLocation:
-    | {
-        city: string | null;
-        country: string | null;
-        tripCount: number;
-        latestTripStart: string;
-        daysHere: number;
-      }
-    | null = null;
+  const locationSummaries = Array.from(cityTripCounts.values()).map((detail) => ({
+    city: detail.city,
+    country: detail.country,
+    tripCount: detail.trips.size,
+    daysHere: detail.days.size,
+    latestTripStart: detail.latestTripStart
+  }));
 
-  for (const detail of cityTripCounts.values()) {
-    const tripCount = detail.trips.size;
-    if (
-      !topLocation ||
-      tripCount > topLocation.tripCount ||
-      (tripCount === topLocation.tripCount && detail.latestTripStart > topLocation.latestTripStart)
-    ) {
-      topLocation = {
-        city: detail.city,
-        country: detail.country,
-        tripCount,
-        latestTripStart: detail.latestTripStart,
-        daysHere: detail.days.size
-      };
-    }
-  }
+  const maxTripCount = locationSummaries.reduce((max, item) => Math.max(max, item.tripCount), 0);
+  const maxDayCount = locationSummaries.reduce((max, item) => Math.max(max, item.daysHere), 0);
 
-  const mostVisitedLocation = topLocation
-    ? {
-        city: topLocation.city,
-        country: topLocation.country,
-        tripCount: topLocation.tripCount,
-        daysHere: topLocation.daysHere
-      }
-    : null;
+  const mostVisitedTrips =
+    maxTripCount > 0
+      ? locationSummaries
+          .filter((item) => item.tripCount === maxTripCount)
+          .sort((a, b) => {
+            if (a.latestTripStart === b.latestTripStart) {
+              const aName = [a.city ?? '', a.country ?? ''].join(',').toLowerCase();
+              const bName = [b.city ?? '', b.country ?? ''].join(',').toLowerCase();
+              return aName.localeCompare(bName);
+            }
+            return a.latestTripStart > b.latestTripStart ? -1 : 1;
+          })
+          .map((item) => ({
+            city: item.city,
+            country: item.country,
+            tripCount: item.tripCount,
+            daysHere: item.daysHere
+          }))
+      : [];
+
+  const mostVisitedDays =
+    maxDayCount > 0
+      ? locationSummaries
+          .filter((item) => item.daysHere === maxDayCount)
+          .sort((a, b) => {
+            if (a.latestTripStart === b.latestTripStart) {
+              const aName = [a.city ?? '', a.country ?? ''].join(',').toLowerCase();
+              const bName = [b.city ?? '', b.country ?? ''].join(',').toLowerCase();
+              return aName.localeCompare(bName);
+            }
+            return a.latestTripStart > b.latestTripStart ? -1 : 1;
+          })
+          .map((item) => ({
+            city: item.city,
+            country: item.country,
+            tripCount: item.tripCount,
+            daysHere: item.daysHere
+          }))
+      : [];
+
+  const mostVisited =
+    mostVisitedTrips.length > 0 || mostVisitedDays.length > 0
+      ? {
+          trips: mostVisitedTrips,
+          days: mostVisitedDays
+        }
+      : null;
+
+  console.log('[calculateStats] most visited summary', {
+    totalLocations: locationSummaries.length,
+    maxTripCount,
+    maxDayCount,
+    trips: mostVisitedTrips.map((item) => ({
+      city: item.city,
+      country: item.country,
+      tripCount: item.tripCount,
+      daysHere: item.daysHere
+    })),
+    days: mostVisitedDays.map((item) => ({
+      city: item.city,
+      country: item.country,
+      tripCount: item.tripCount,
+      daysHere: item.daysHere
+    }))
+  });
 
   const completedTripIds = trips.filter((trip) => trip.end_date < todayISO).map((trip) => trip.id);
   const completedTripIdSet = new Set(completedTripIds);
@@ -356,7 +397,7 @@ export async function calculateStats(
     totalTravelDays,
     countriesVisited: countriesVisited.size,
     locationsVisited: locationsVisited.size,
-    mostVisitedLocation,
+    mostVisited,
     hashtagDistribution: Array.from(hashtagDistributionMap.entries())
       .map(([hashtag, detail]) => ({
         hashtag,

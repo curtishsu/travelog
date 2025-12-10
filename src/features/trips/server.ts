@@ -2,11 +2,17 @@ import { notFound, redirect } from 'next/navigation';
 
 import { calculateStats } from '@/features/stats/calculate';
 import type { StatsSummary } from '@/features/stats/types';
+import { normalizeTripDetail } from '@/features/trips/privacy';
 import type { TripDetail } from '@/features/trips/types';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 import type { Database } from '@/types/database';
 
-export async function loadTripDetail(tripId: string): Promise<TripDetail> {
+type TripDetailResult = {
+  trip: TripDetail;
+  guestModeEnabled: boolean;
+};
+
+export async function loadTripDetail(tripId: string): Promise<TripDetailResult> {
   const { supabase, user, isDemoMode } = await getSupabaseForRequest();
 
   if (!user && !isDemoMode) {
@@ -14,7 +20,7 @@ export async function loadTripDetail(tripId: string): Promise<TripDetail> {
   }
 
   const userId = user?.id;
-  const { data, error } = await supabase
+  const tripRequest = supabase
     .from('trips')
     .select(
       `
@@ -37,22 +43,45 @@ export async function loadTripDetail(tripId: string): Promise<TripDetail> {
     .eq('user_id', userId ?? '')
     .maybeSingle<TripDetail>();
 
+  const guestModeRequest = userId
+    ? supabase
+        .from('user_settings')
+        .select('guest_mode_enabled')
+        .eq('user_id', userId)
+        .maybeSingle<{ guest_mode_enabled: boolean }>()
+    : Promise.resolve({ data: null, error: null } as {
+        data: { guest_mode_enabled: boolean } | null;
+        error: unknown;
+      });
+
+  const [{ data, error }, { data: settingsData, error: guestModeError }] = await Promise.all([
+    tripRequest,
+    guestModeRequest
+  ]);
+
   if (error || !data) {
     notFound();
   }
+
+  if (guestModeError) {
+    console.error('[loadTripDetail] failed to load guest mode settings', guestModeError);
+  }
+
+  const guestModeEnabled = settingsData?.guest_mode_enabled ?? false;
 
   const typesProbe = await supabase
     .from('trip_types')
     .select('id, trip_id, type')
     .eq('trip_id', tripId);
 
-  const sortedDays = (data.trip_days ?? []).slice().sort((a, b) => a.day_index - b.day_index);
+  const trip = normalizeTripDetail(data as TripDetail);
 
   // Debug: surface trip type shape arriving from Supabase
   console.log('[loadTripDetail] trip types snapshot', {
     tripId,
-    tripTypeCount: data.trip_types?.length ?? 0,
-    tripTypeSample: (data.trip_types ?? []).slice(0, 5).map((type) => ({
+    guestModeEnabled,
+    tripTypeCount: trip.trip_types?.length ?? 0,
+    tripTypeSample: (trip.trip_types ?? []).slice(0, 5).map((type) => ({
       id: type.id,
       type: type.type
     })),
@@ -61,8 +90,8 @@ export async function loadTripDetail(tripId: string): Promise<TripDetail> {
   });
 
   return {
-    ...data,
-    trip_days: sortedDays
+    trip,
+    guestModeEnabled
   };
 }
 
