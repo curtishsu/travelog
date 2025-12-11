@@ -12,7 +12,22 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Travelog',
-  description: 'Travelog – personal travel logging and reflection.'
+  description: 'Travelog – personal travel logging and reflection.',
+  manifest: '/manifest.webmanifest',
+  themeColor: '#38bdf8',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Travelog'
+  },
+  icons: {
+    icon: [
+      { url: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+    ],
+    apple: '/icons/apple-touch-icon-180.png'
+  }
 };
 
 type RootLayoutProps = {
