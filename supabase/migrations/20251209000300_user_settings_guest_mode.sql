@@ -20,3 +20,5 @@ execute procedure handle_updated_at();
 
 comment on table public.user_settings is 'Per-user application settings (e.g. guest mode).';
 
+
+

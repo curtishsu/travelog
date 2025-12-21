@@ -3,3 +3,5 @@ alter table public.trips
 
 comment on column public.trips.is_reflection_locked is 'Indicates whether the trip-level reflection is locked.';
 
+
+

@@ -7,3 +7,5 @@ alter table public.trip_days
 comment on column public.trips.is_trip_content_locked is 'Indicates whether all trip content is locked for guest mode.';
 comment on column public.trip_days.is_locked is 'Indicates whether this day’s journal/highlights are locked.';
 
+
+

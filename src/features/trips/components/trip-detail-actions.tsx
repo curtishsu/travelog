@@ -82,39 +82,41 @@ export function TripDetailActions({ tripId, disabled = false }: TripDetailAction
 
   return (
     <>
-      <div ref={actionsRef} className="relative flex justify-end">
-        <button
-          type="button"
-          onClick={() => setIsMenuOpen((open) => !open)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700/70 bg-slate-900 text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-slate-950"
-          aria-haspopup="menu"
-          aria-expanded={isMenuOpen}
-          aria-label="Open trip actions"
-        >
-          <MoreVertical className="h-5 w-5" />
-        </button>
-        {isMenuOpen ? (
-          <div className="absolute right-0 top-full z-40 mt-2 w-40 rounded-2xl border border-slate-800 bg-slate-900/90 p-1 shadow-xl backdrop-blur">
-            <button
-              type="button"
-              onClick={handleEdit}
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800/70"
-            >
-              Edit trip
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteClick}
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-red-300 transition hover:bg-red-300/10"
-            >
-              Delete trip
-            </button>
-          </div>
+      <div className="ml-auto flex shrink-0 flex-col items-end gap-2">
+        <div ref={actionsRef} className="relative flex shrink-0 justify-end">
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen((open) => !open)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700/70 bg-slate-900 text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-slate-950"
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+            aria-label="Open trip actions"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+          {isMenuOpen ? (
+            <div className="absolute right-0 top-full z-40 mt-2 w-40 rounded-2xl border border-slate-800 bg-slate-900/90 p-1 shadow-xl backdrop-blur">
+              <button
+                type="button"
+                onClick={handleEdit}
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800/70"
+              >
+                Edit trip
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteClick}
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-red-300 transition hover:bg-red-300/10"
+              >
+                Delete trip
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {error ? (
+          <p className="text-right text-sm text-red-300">Failed to delete trip. Please try again.</p>
         ) : null}
       </div>
-      {error ? (
-        <p className="mt-2 text-sm text-red-300">Failed to delete trip. Please try again.</p>
-      ) : null}
       {isConfirming ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur">
           <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">

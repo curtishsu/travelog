@@ -3,7 +3,6 @@
 import { CalendarDays, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 
-import { TripStatusBadge } from '@/features/trips/components/trip-status-badge';
 import type { TripSummary } from '@/features/trips/types';
 import { formatDateRange } from '@/lib/date';
 
@@ -48,7 +47,6 @@ export function TripCard({ trip }: TripCardProps) {
             <span>{formatDateRange(trip.start_date, trip.end_date)}</span>
           </div>
         </div>
-        {trip.status !== 'completed' ? <TripStatusBadge status={trip.status} /> : null}
       </div>
       {hasTypes || hasHashtags ? (
         <div className="flex flex-col gap-2">
