@@ -14,10 +14,10 @@ type TripDayInsert = Database['public']['Tables']['trip_days']['Insert'];
 type TripLinkInsert = Database['public']['Tables']['trip_links']['Insert'];
 type TripTypeInsert = Database['public']['Tables']['trip_types']['Insert'];
 
-type TripGroupWithMembers =
-  Database['public']['Tables']['trip_groups']['Row'] & {
-    trip_group_members: Database['public']['Tables']['trip_group_members']['Row'][];
-  };
+type PersonRow = Database['public']['Tables']['people']['Row'];
+type TripGroupWithMembers = Database['public']['Tables']['trip_groups']['Row'] & {
+  members: Array<{ person: PersonRow | null }>;
+};
 
 type TripWithRelations = Database['public']['Tables']['trips']['Row'] & {
   trip_links: Database['public']['Tables']['trip_links']['Row'][];
@@ -31,6 +31,22 @@ type TripWithRelations = Database['public']['Tables']['trips']['Row'] & {
   >;
   trip_group: TripGroupWithMembers | null;
 };
+
+function normalizeTripApiResponse(trip: TripDetail): TripDetail {
+  const group = trip.trip_group
+    ? {
+        ...trip.trip_group,
+        members: ((trip.trip_group as unknown as { members?: Array<{ person: PersonRow | null }> }).members ?? [])
+          .map((member) => member.person)
+          .filter(Boolean) as PersonRow[]
+      }
+    : null;
+
+  return {
+    ...trip,
+    trip_group: group
+  };
+}
 
 export async function GET(_: NextRequest, context: { params: { tripId: string } }) {
   const { supabase, user } = await getSupabaseForRequest();
@@ -53,6 +69,18 @@ export async function GET(_: NextRequest, context: { params: { tripId: string } 
           trip_locations(*),
           photos(*),
           trip_day_hashtags(*)
+        ),
+        trip_group:trip_groups!trips_trip_group_id_fkey(
+          *,
+          members:trip_group_people(
+            person:people(*)
+          )
+        ),
+        trip_companion_groups(
+          trip_group_id
+        ),
+        trip_companion_people(
+          person_id
         )
       `
     )
@@ -64,7 +92,7 @@ export async function GET(_: NextRequest, context: { params: { tripId: string } 
     return notFound('Trip not found');
   }
 
-  const trip = normalizeTripDetail(data as TripDetail);
+  const trip = normalizeTripApiResponse(normalizeTripDetail(data as TripDetail));
 
   return ok({ trip });
 }
@@ -100,31 +128,9 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
   }
 
   const updates: Partial<Database['public']['Tables']['trips']['Row']> = {};
-  if (parseResult.data.tripGroupId !== undefined) {
-    if (parseResult.data.tripGroupId === null) {
-      updates.trip_group_id = null;
-    } else {
-      const { data: ownedGroup, error: groupError } = await supabase
-        .from('trip_groups')
-        .select('id')
-        .eq('id', parseResult.data.tripGroupId)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (groupError) {
-        console.error('[PATCH /api/trips/:id] failed to verify trip group', groupError);
-        return serverError('Failed to update trip.');
-      }
-
-      const typedOwnedGroup = ownedGroup as { id: string } | null;
-
-      if (!typedOwnedGroup) {
-        return badRequest('Trip group not found.');
-      }
-
-      updates.trip_group_id = typedOwnedGroup.id;
-    }
-  }
+  const shouldUpdateCompanionGroups =
+    parseResult.data.companionGroupIds !== undefined || parseResult.data.tripGroupId !== undefined;
+  const shouldUpdateCompanionPeople = parseResult.data.companionPersonIds !== undefined;
 
   const requestedStartDateISO = parseResult.data.startDate
     ? toISODate(parseResult.data.startDate)
@@ -273,6 +279,142 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
     });
   }
 
+  if (shouldUpdateCompanionGroups) {
+    let desiredGroupIds: string[] = [];
+
+    if (parseResult.data.companionGroupIds !== undefined) {
+      desiredGroupIds = parseResult.data.companionGroupIds;
+    } else if (parseResult.data.tripGroupId !== undefined) {
+      desiredGroupIds = parseResult.data.tripGroupId ? [parseResult.data.tripGroupId] : [];
+    }
+
+    if (parseResult.data.tripGroupId && parseResult.data.companionGroupIds !== undefined) {
+      desiredGroupIds = [...desiredGroupIds, parseResult.data.tripGroupId];
+    }
+
+    desiredGroupIds = Array.from(new Set(desiredGroupIds));
+
+    if (desiredGroupIds.length) {
+      const { data: ownedGroups, error: groupError } = await supabase
+        .from('trip_groups')
+        .select('id')
+        .eq('user_id', userId)
+        .in('id', desiredGroupIds);
+      if (groupError) {
+        console.error('[PATCH /api/trips/:id] failed to verify trip groups', groupError);
+        return serverError('Failed to update trip.');
+      }
+      const ownedGroupIds = new Set((ownedGroups ?? []).map((row) => (row as { id: string }).id));
+      const missing = desiredGroupIds.find((id) => !ownedGroupIds.has(id));
+      if (missing) {
+        return badRequest('Trip group not found.');
+      }
+    }
+
+    relatedUpdateTasks.push(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripCompanionGroupsTable = supabase.from('trip_companion_groups') as any;
+      const { data: existingRows, error: existingError } = await tripCompanionGroupsTable
+        .select('trip_group_id')
+        .eq('trip_id', tripId);
+      if (existingError) {
+        throw existingError;
+      }
+      const existingIds = new Set<string>(
+        (existingRows ?? []).map((row: { trip_group_id: string }) => row.trip_group_id)
+      );
+      const desiredIds = new Set(desiredGroupIds);
+
+      const toDelete = Array.from(existingIds).filter((id) => !desiredIds.has(id));
+      const toInsert = desiredGroupIds.filter((id) => !existingIds.has(id));
+
+      if (toDelete.length) {
+        const { error: deleteError } = await tripCompanionGroupsTable
+          .delete()
+          .eq('trip_id', tripId)
+          .in('trip_group_id', toDelete);
+        if (deleteError) {
+          throw deleteError;
+        }
+      }
+
+      if (toInsert.length) {
+        const { error: insertError } = await tripCompanionGroupsTable.insert(
+          toInsert.map((groupId: string) => ({
+            trip_id: tripId,
+            trip_group_id: groupId
+          }))
+        );
+        if (insertError) {
+          throw insertError;
+        }
+      }
+    });
+
+    updates.trip_group_id = desiredGroupIds.length === 1 ? desiredGroupIds[0] : null;
+  }
+
+  if (shouldUpdateCompanionPeople) {
+    const desiredPersonIds = Array.from(new Set(parseResult.data.companionPersonIds ?? []));
+
+    if (desiredPersonIds.length) {
+      const { data: ownedPeople, error: peopleError } = await supabase
+        .from('people')
+        .select('id')
+        .eq('user_id', userId)
+        .in('id', desiredPersonIds);
+      if (peopleError) {
+        console.error('[PATCH /api/trips/:id] failed to verify people', peopleError);
+        return serverError('Failed to update trip.');
+      }
+      const ownedPersonIds = new Set((ownedPeople ?? []).map((row) => (row as { id: string }).id));
+      const missing = desiredPersonIds.find((id) => !ownedPersonIds.has(id));
+      if (missing) {
+        return badRequest('Person not found.');
+      }
+    }
+
+    relatedUpdateTasks.push(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripCompanionPeopleTable = supabase.from('trip_companion_people') as any;
+      const { data: existingRows, error: existingError } = await tripCompanionPeopleTable
+        .select('person_id')
+        .eq('trip_id', tripId);
+      if (existingError) {
+        throw existingError;
+      }
+      const existingIds = new Set<string>(
+        (existingRows ?? []).map((row: { person_id: string }) => row.person_id)
+      );
+      const desiredIds = new Set(desiredPersonIds);
+
+      const toDelete = Array.from(existingIds).filter((id) => !desiredIds.has(id));
+      const toInsert = desiredPersonIds.filter((id) => !existingIds.has(id));
+
+      if (toDelete.length) {
+        const { error: deleteError } = await tripCompanionPeopleTable
+          .delete()
+          .eq('trip_id', tripId)
+          .in('person_id', toDelete);
+        if (deleteError) {
+          throw deleteError;
+        }
+      }
+
+      if (toInsert.length) {
+        const { error: insertError } = await tripCompanionPeopleTable.insert(
+          toInsert.map((personId: string) => ({
+            trip_id: tripId,
+            person_id: personId
+          }))
+        );
+        if (insertError) {
+          throw insertError;
+        }
+      }
+    });
+  }
+
   const hasTripUpdates = Object.keys(updates).length > 0;
 
   try {
@@ -362,8 +504,10 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
       throw reloadError ?? new Error('Failed to reload trip after update.');
     }
 
+    const trip = normalizeTripApiResponse(normalizeTripDetail(updatedTrip as unknown as TripDetail));
+
     return ok({
-      trip: updatedTrip,
+      trip,
       overlapWarning
     });
   } catch (error) {
@@ -408,9 +552,17 @@ async function getTripWithRelations(
           photos(*),
           trip_day_hashtags(*)
         ),
-        trip_group:trip_groups(
+        trip_group:trip_groups!trips_trip_group_id_fkey(
           *,
-          members:trip_group_members(*)
+          members:trip_group_people(
+            person:people(*)
+          )
+        ),
+        trip_companion_groups(
+          trip_group_id
+        ),
+        trip_companion_people(
+          person_id
         )
       `
     )

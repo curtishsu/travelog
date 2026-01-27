@@ -6,20 +6,77 @@ import { tripGroupUpdateSchema } from '@/lib/schemas/trip-groups';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 import type { Database } from '@/types/database';
 
-type TripGroupRecord = Database['public']['Tables']['trip_groups']['Row'] & {
-  members: Database['public']['Tables']['trip_group_members']['Row'][];
+type PersonRow = Database['public']['Tables']['people']['Row'];
+type TripGroupPeopleRow = Database['public']['Tables']['trip_group_people']['Row'] & {
+  person: PersonRow | null;
 };
-type TripGroupMemberInsert = Database['public']['Tables']['trip_group_members']['Insert'];
+type TripGroupRecord = Database['public']['Tables']['trip_groups']['Row'] & {
+  members: TripGroupPeopleRow[];
+};
 
-function normalizeMemberName(value: string | undefined | null) {
+function normalizeFirstName(value: string | undefined | null) {
   const trimmed = (value ?? '').trim();
   return trimmed.length ? trimmed : null;
 }
 
-function buildMemberKey(first: string | null, last: string | null) {
-  const firstKey = (first ?? '').trim().toLowerCase();
-  const lastKey = (last ?? '').trim().toLowerCase();
-  return `${firstKey}|${lastKey}`;
+function normalizeLastName(value: string | undefined | null) {
+  const trimmed = (value ?? '').trim();
+  return trimmed.length ? trimmed : null;
+}
+
+async function getOrCreatePersonId(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  firstName: string,
+  lastName: string | null
+): Promise<string> {
+  const first = firstName.trim();
+  const last = lastName?.trim() ? lastName.trim() : null;
+
+  const lookupQuery = supabase.from('people').select('id').eq('user_id', userId).ilike('first_name', first);
+  if (last === null) {
+    lookupQuery.is('last_name', null);
+  } else {
+    lookupQuery.ilike('last_name', last);
+  }
+  const { data: existing, error: lookupError } = await lookupQuery.maybeSingle<{ id: string }>();
+
+  if (lookupError) {
+    throw lookupError;
+  }
+  if (existing?.id) {
+    return existing.id;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const peopleTable = supabase.from('people') as any;
+  const { data: inserted, error: insertError } = await peopleTable
+    .insert({
+      user_id: userId,
+      first_name: first,
+      last_name: last
+    })
+    .select('id')
+    .maybeSingle();
+
+  if (insertError || !inserted) {
+    if ((insertError as { code?: string })?.code === '23505') {
+      const retryQuery = supabase.from('people').select('id').eq('user_id', userId).ilike('first_name', first);
+      if (last === null) {
+        retryQuery.is('last_name', null);
+      } else {
+        retryQuery.ilike('last_name', last);
+      }
+      const { data: retry, error: retryError } = await retryQuery.maybeSingle<{ id: string }>();
+      if (retryError || !retry?.id) {
+        throw retryError ?? insertError;
+      }
+      return retry.id;
+    }
+    throw insertError ?? new Error('Failed to create person.');
+  }
+
+  return (inserted as { id: string }).id;
 }
 
 async function fetchTripGroup(
@@ -32,7 +89,9 @@ async function fetchTripGroup(
     .select(
       `
         *,
-        members:trip_group_members(*)
+        members:trip_group_people(
+          person:people(*)
+        )
       `
     )
     .eq('id', tripGroupId)
@@ -58,7 +117,12 @@ export async function GET(_: NextRequest, context: { params: { tripGroupId: stri
     return notFound('Trip group not found.');
   }
 
-  return ok({ group: data });
+  return ok({
+    group: {
+      ...data,
+      members: (data.members ?? []).map((member) => member.person).filter(Boolean) as PersonRow[]
+    }
+  });
 }
 
 export async function PATCH(request: NextRequest, context: { params: { tripGroupId: string } }) {
@@ -111,88 +175,98 @@ export async function PATCH(request: NextRequest, context: { params: { tripGroup
     }
 
     if (parseResult.data.members) {
-      const normalizedMembers = parseResult.data.members
-        .map((member) => ({
-          id: member.id ?? null,
-          first_name: normalizeMemberName(member.firstName),
-          last_name: normalizeMemberName(member.lastName)
-        }))
-        .filter((member) => member.first_name || member.last_name);
+      const memberIds: string[] = [];
+      for (const member of parseResult.data.members) {
+        if (member.id) {
+          const { data: ownedPerson, error: ownedPersonError } = await supabase
+            .from('people')
+            .select('id, first_name, last_name')
+            .eq('id', member.id)
+            .eq('user_id', user.id)
+            .maybeSingle<{ id: string; first_name: string; last_name: string | null }>();
+          if (ownedPersonError) {
+            throw ownedPersonError;
+          }
+          if (!ownedPerson?.id) {
+            return badRequest('Person not found.');
+          }
 
-      const seen = new Set<string>();
-      const dedupedMembers = normalizedMembers.filter((member) => {
-        const key = buildMemberKey(member.first_name, member.last_name);
-        if (seen.has(key)) {
-          return false;
+          const nextFirst = member.firstName !== undefined ? normalizeFirstName(member.firstName) : undefined;
+          const nextLast = member.lastName !== undefined ? normalizeLastName(member.lastName) : undefined;
+
+          const shouldUpdateName =
+            (nextFirst !== undefined && nextFirst !== ownedPerson.first_name) ||
+            (nextLast !== undefined && nextLast !== ownedPerson.last_name);
+
+          if (shouldUpdateName) {
+            const nameUpdates: Record<string, unknown> = {};
+            if (nextFirst !== undefined) {
+              if (!nextFirst) {
+                return badRequest('First name is required.');
+              }
+              nameUpdates.first_name = nextFirst;
+            }
+            if (nextLast !== undefined) {
+              nameUpdates.last_name = nextLast;
+            }
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const peopleTable = supabase.from('people') as any;
+            const { error: updatePersonError } = await peopleTable
+              .update(nameUpdates)
+              .eq('id', ownedPerson.id)
+              .eq('user_id', user.id);
+
+            if (updatePersonError) {
+              if ((updatePersonError as { code?: string })?.code === '23505') {
+                return badRequest('Person already exists.');
+              }
+              throw updatePersonError;
+            }
+          }
+
+          memberIds.push(ownedPerson.id);
+          continue;
         }
-        seen.add(key);
-        return true;
-      });
+
+        const first = normalizeFirstName(member.firstName);
+        if (!first) {
+          return badRequest('First name is required.');
+        }
+        const last = normalizeLastName(member.lastName);
+        const personId = await getOrCreatePersonId(supabase, user.id, first, last);
+        memberIds.push(personId);
+      }
+
+      const uniqueMemberIds = Array.from(new Set(memberIds));
+      const incoming = new Set(uniqueMemberIds);
+
+      const existingMemberIds = new Set((existingGroup.members ?? []).map((member) => member.person_id));
+
+      const toDelete = Array.from(existingMemberIds).filter((personId) => !incoming.has(personId));
+      const toInsert = uniqueMemberIds.filter((personId) => !existingMemberIds.has(personId));
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tripGroupMembersTable = supabase.from('trip_group_members') as any;
+      const tripGroupPeopleTable = supabase.from('trip_group_people') as any;
 
-      const existingMembersMap = new Map(
-        (existingGroup.members ?? []).map((member) => [member.id, member])
-      );
-
-      const incomingIds = new Set(
-        dedupedMembers.filter((member) => member.id).map((member) => member.id as string)
-      );
-
-      const membersToDelete = (existingGroup.members ?? [])
-        .filter((member) => !incomingIds.has(member.id))
-        .map((member) => member.id);
-
-      if (membersToDelete.length) {
-        const { error: deleteError } = await tripGroupMembersTable.delete().in('id', membersToDelete);
+      if (toDelete.length) {
+        const { error: deleteError } = await tripGroupPeopleTable
+          .delete()
+          .eq('trip_group_id', existingGroup.id)
+          .in('person_id', toDelete);
 
         if (deleteError) {
           throw deleteError;
         }
       }
 
-      const membersToUpdate = dedupedMembers
-        .filter((member) => member.id)
-        .map((member) => member as { id: string; first_name: string | null; last_name: string | null })
-        .filter((member) => {
-          const existing = existingMembersMap.get(member.id);
-          if (!existing) {
-            return false;
-          }
-          return (
-            existing.first_name !== member.first_name || existing.last_name !== member.last_name
-          );
-        });
-
-      if (membersToUpdate.length) {
-        const { error: updateMembersError } = await tripGroupMembersTable.upsert(
-          membersToUpdate.map((member) => ({
-            id: member.id,
+      if (toInsert.length) {
+        const { error: insertMembersError } = await tripGroupPeopleTable.insert(
+          toInsert.map((personId) => ({
             trip_group_id: existingGroup.id,
-            first_name: member.first_name,
-            last_name: member.last_name
+            person_id: personId
           }))
         );
-
-        if (updateMembersError) {
-          if ((updateMembersError as { code?: string })?.code === '23505') {
-            return badRequest('Group members must be unique within a group.');
-          }
-          throw updateMembersError;
-        }
-      }
-
-      const membersToInsert = dedupedMembers.filter((member) => !member.id);
-
-      if (membersToInsert.length) {
-        const memberRows: TripGroupMemberInsert[] = membersToInsert.map((member) => ({
-          trip_group_id: existingGroup.id,
-          first_name: member.first_name,
-          last_name: member.last_name
-        }));
-
-        const { error: insertMembersError } = await tripGroupMembersTable.insert(memberRows);
 
         if (insertMembersError) {
           if ((insertMembersError as { code?: string })?.code === '23505') {
@@ -213,7 +287,12 @@ export async function PATCH(request: NextRequest, context: { params: { tripGroup
       throw reloadError ?? new Error('Failed to reload trip group.');
     }
 
-    return ok({ group: data });
+    return ok({
+      group: {
+        ...data,
+        members: (data.members ?? []).map((member) => member.person).filter(Boolean) as PersonRow[]
+      }
+    });
   } catch (error) {
     console.error('[PATCH /api/trip-groups/:id] failed', error);
     return serverError('Failed to update trip group.');

@@ -27,6 +27,20 @@ type HashtagDistributionItem = {
   tripDays: StatsSummary['hashtagDistribution'][number]['tripDays'];
 };
 
+type CompanionPersonDistributionItem = {
+  id: string;
+  label: string;
+  value: number;
+  trips: StatsSummary['tripCompanionPersonDistribution'][number]['trips'];
+};
+
+type CompanionGroupDistributionItem = {
+  id: string;
+  label: string;
+  value: number;
+  trips: StatsSummary['tripCompanionGroupDistribution'][number]['trips'];
+};
+
 type TripTrendPoint = {
   bucket: string;
   label: string;
@@ -46,6 +60,9 @@ type TrendExpandedSections = Record<string, { trips?: boolean; tripDays?: boolea
 
 export function StatsDashboard({ stats }: StatsDashboardProps) {
   const [distributionType, setDistributionType] = useState<'hashtags' | 'tripTypes'>('tripTypes');
+  const [companionDistributionType, setCompanionDistributionType] = useState<'person' | 'group'>(
+    'person'
+  );
   const [trendGrouping, setTrendGrouping] = useState<'year' | 'month'>('year');
   const [mostVisitedMetric, setMostVisitedMetric] = useState<'trips' | 'days'>('trips');
   const [mostVisitedIndices, setMostVisitedIndices] = useState<Record<'trips' | 'days', number>>({
@@ -119,6 +136,24 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
     }));
   }, [stats.hashtagDistribution]);
 
+  const companionPersonData: CompanionPersonDistributionItem[] = useMemo(() => {
+    return stats.tripCompanionPersonDistribution.map((item) => ({
+      id: item.personId,
+      label: [item.firstName, item.lastName].filter(Boolean).join(' '),
+      value: item.tripCount,
+      trips: item.trips
+    }));
+  }, [stats.tripCompanionPersonDistribution]);
+
+  const companionGroupData: CompanionGroupDistributionItem[] = useMemo(() => {
+    return stats.tripCompanionGroupDistribution.map((item) => ({
+      id: item.groupId,
+      label: item.groupName,
+      value: item.tripCount,
+      trips: item.trips
+    }));
+  }, [stats.tripCompanionGroupDistribution]);
+
   const groupingLabel = trendGrouping === 'year' ? 'year' : 'month';
 
   const tripsTrendData: TripTrendPoint[] = useMemo(() => {
@@ -147,6 +182,10 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
     ? tripTypeData
     : hashtagData;
   const maxDistributionValue = distributionData.reduce((max, item) => Math.max(max, item.value), 0) || 1;
+
+  const companionData: Array<CompanionPersonDistributionItem | CompanionGroupDistributionItem> =
+    companionDistributionType === 'person' ? companionPersonData : companionGroupData;
+  const maxCompanionValue = companionData.reduce((max, item) => Math.max(max, item.value), 0) || 1;
   const hasMostVisited = mostVisitedTrips.length > 0 || mostVisitedDays.length > 0;
 
   const activeMostVisitedList =
@@ -371,6 +410,88 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
                   <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
                     <div className="flex items-center gap-2">{label}</div>
                     {valueDisplay}
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-slate-800">
+                    <div className="h-2 rounded-full" style={{ width, backgroundColor: color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Trip group</h2>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={companionDistributionType === 'person' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setCompanionDistributionType('person')}
+            >
+              Person
+            </Button>
+            <Button
+              type="button"
+              variant={companionDistributionType === 'group' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setCompanionDistributionType('group')}
+            >
+              Group
+            </Button>
+          </div>
+        </div>
+        {companionData.length === 0 ? (
+          <p className="rounded-3xl border border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
+            No trip group data yet. Add companions to completed trips to populate this chart.
+          </p>
+        ) : (
+          <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
+            {companionData.map((item, index) => {
+              const color = chartColors[index % chartColors.length];
+              const width = `${(item.value / maxCompanionValue) * 100}%`;
+              const label =
+                'trips' in item && item.trips.length > 0 ? (
+                  <Tooltip trigger={<span className="text-slate-200 normal-case">{item.label}</span>} align="left">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-slate-100">Trips</p>
+                        <Link
+                          href={
+                            companionDistributionType === 'person'
+                              ? `/map?person=${encodeURIComponent(item.id)}`
+                              : `/map?group=${encodeURIComponent(item.id)}`
+                          }
+                          className="text-xs font-semibold uppercase tracking-wide text-brand hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
+                        >
+                          Open on globe
+                        </Link>
+                      </div>
+                      <ul className="max-h-48 space-y-1 overflow-y-auto text-left text-slate-200">
+                        {item.trips.map((trip) => (
+                          <li key={trip.tripId}>
+                            <Link
+                              href={`/trips/${trip.tripId}`}
+                              className="text-brand hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand/60"
+                            >
+                              {trip.tripName}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </Tooltip>
+                ) : (
+                  <span className="text-slate-200 normal-case">{item.label}</span>
+                );
+
+              return (
+                <div key={item.label} className="space-y-2">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+                    <div className="flex items-center gap-2">{label}</div>
+                    <span className="text-slate-300">{item.value}</span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-slate-800">
                     <div className="h-2 rounded-full" style={{ width, backgroundColor: color }} />

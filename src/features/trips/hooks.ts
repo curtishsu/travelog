@@ -19,13 +19,18 @@ import {
   createTripGroup,
   updateTripGroup,
   deleteTripGroup,
-  type TripGroupInput
+  type TripGroupInput,
+  fetchPeople,
+  createPerson,
+  updatePerson,
+  type PersonInput
 } from '@/features/trips/api';
 import type { TripDetail, TripGroup } from '@/features/trips/types';
 
 const tripsListKey = ['trips'];
 const tripDetailKey = (tripId: string) => ['trip', tripId];
 const tripGroupsKey = ['trip-groups'];
+const peopleKey = ['people'];
 
 export function useTripsList() {
   return useQuery({
@@ -47,6 +52,14 @@ export function useTripGroups() {
   return useQuery({
     queryKey: tripGroupsKey,
     queryFn: fetchTripGroups,
+    staleTime: 1000 * 60 * 5
+  });
+}
+
+export function usePeople() {
+  return useQuery({
+    queryKey: peopleKey,
+    queryFn: fetchPeople,
     staleTime: 1000 * 60 * 5
   });
 }
@@ -140,6 +153,39 @@ export function useUpdateTrip(
       queryClient.setQueryData(tripDetailKey(variables.tripId), data.trip);
       await queryClient.invalidateQueries({ queryKey: tripsListKey });
       options?.onSuccess?.(data, variables, context, mutation);
+    },
+    ...options
+  });
+}
+
+type CreatePersonVariables = PersonInput;
+
+export function useCreatePerson(options?: UseMutationOptions<Awaited<ReturnType<typeof createPerson>>, Error, CreatePersonVariables>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createPerson,
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries({ queryKey: peopleKey });
+      options?.onSuccess?.(...args);
+    },
+    ...options
+  });
+}
+
+type UpdatePersonVariables = { personId: string; payload: Partial<PersonInput> };
+
+export function useUpdatePerson(options?: UseMutationOptions<Awaited<ReturnType<typeof updatePerson>>, Error, UpdatePersonVariables>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ personId, payload }) => updatePerson(personId, payload),
+    onSuccess: async (...args) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: peopleKey }),
+        queryClient.invalidateQueries({ queryKey: tripGroupsKey }),
+        queryClient.invalidateQueries({ queryKey: tripsListKey }),
+        queryClient.invalidateQueries({ queryKey: ['trip'] })
+      ]);
+      options?.onSuccess?.(...args);
     },
     ...options
   });

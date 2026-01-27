@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useRef, useDeferredValue, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Hash, Lock, MapPin, Plus, Search, Unlock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { MinimalMarkdown } from '@/components/ui/minimal-markdown';
 import type { LocationInput } from '@/features/trips/api';
 import {
   useDeletePhoto,
@@ -63,6 +64,8 @@ export function TripDayEditor({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isDayLocked, setIsDayLocked] = useState(day.is_locked ?? false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [showHighlightPreview, setShowHighlightPreview] = useState(false);
+  const [showJournalPreview, setShowJournalPreview] = useState(false);
   const { mutateAsync, isPending, error } = useUpdateTripDay();
   const queryClient = useQueryClient();
   const { mutateAsync: deletePhotoMutation, isPending: isDeletingPhoto } = useDeletePhoto();
@@ -410,6 +413,8 @@ export function TripDayEditor({
     removedLocationIds.length > 0 ||
     pendingLocationsToAdd.length > 0;
   const effectiveIsLocked = isTripLocked || isDayLocked;
+  const deferredHighlight = useDeferredValue(highlight);
+  const deferredJournalEntry = useDeferredValue(journalEntry);
 
   async function handleToggleDayLock() {
     if (isTripLocked) {
@@ -790,7 +795,16 @@ export function TripDayEditor({
       </section>
       <div className="grid gap-6">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-200">Highlight</label>
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-sm font-medium text-slate-200">Highlight</label>
+            <button
+              type="button"
+              className="text-xs font-medium text-slate-400 underline-offset-4 transition hover:text-slate-200 hover:underline"
+              onClick={() => setShowHighlightPreview((prev) => !prev)}
+            >
+              {showHighlightPreview ? 'Hide preview' : 'Show preview'}
+            </button>
+          </div>
           <input
             type="text"
             value={highlight}
@@ -800,9 +814,24 @@ export function TripDayEditor({
             placeholder="Best moment of the day"
           />
           <p className="text-xs text-slate-500">{240 - highlight.length} characters left</p>
+          {showHighlightPreview ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
+              <MinimalMarkdown value={deferredHighlight} />
+            </div>
+          ) : null}
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-200">Journal entry</label>
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-sm font-medium text-slate-200">Journal entry</label>
+            <button
+              type="button"
+              className="text-xs font-medium text-slate-400 underline-offset-4 transition hover:text-slate-200 hover:underline"
+              onClick={() => setShowJournalPreview((prev) => !prev)}
+            >
+              {showJournalPreview ? 'Hide preview' : 'Show preview'}
+            </button>
+          </div>
           <textarea
             value={journalEntry}
             onChange={(event) => setJournalEntry(event.target.value)}
@@ -812,6 +841,12 @@ export function TripDayEditor({
             placeholder="Write everything you want to remember."
           />
           <p className="text-xs text-slate-500">{7000 - journalEntry.length} characters left</p>
+          {showJournalPreview ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
+              <MinimalMarkdown value={deferredJournalEntry} />
+            </div>
+          ) : null}
         </div>
         <div className="space-y-3">
           <div className="flex items-center justify-between">

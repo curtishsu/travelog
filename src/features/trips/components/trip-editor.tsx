@@ -51,7 +51,11 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
       tripTypes: activeTrip.trip_types.map((type) => type.type),
       reflection: activeTrip.reflection ?? null,
       tripGroupId: activeTrip.trip_group_id ?? null,
-      tripGroupName: activeTrip.trip_group?.name ?? ''
+      tripGroupName: activeTrip.trip_group?.name ?? '',
+      companionGroupIds:
+        activeTrip.trip_companion_groups?.map((row) => row.trip_group_id) ??
+        (activeTrip.trip_group_id ? [activeTrip.trip_group_id] : []),
+      companionPersonIds: activeTrip.trip_companion_people?.map((row) => row.person_id) ?? []
     }),
     [activeTrip]
   );
@@ -76,7 +80,9 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
         endDate: values.endDate,
         links: values.links,
         tripTypes: values.tripTypes,
-        tripGroupId: values.tripGroupId ?? null
+        tripGroupId: values.tripGroupId ?? null,
+        companionGroupIds: values.companionGroupIds ?? [],
+        companionPersonIds: values.companionPersonIds ?? []
       }
     });
     if (result.overlapWarning?.message) {

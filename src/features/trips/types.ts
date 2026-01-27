@@ -44,13 +44,18 @@ export type TripDetail = Tables<'trips'> & {
   trip_types: TripType[];
   trip_days: TripDayWithRelations[];
   trip_group: TripGroup | null;
+  trip_companion_groups?: TripCompanionGroup[];
+  trip_companion_people?: TripCompanionPerson[];
 };
+
+export type Person = Tables<'people'>;
 
 export type TripGroup = Tables<'trip_groups'> & {
-  members: TripGroupMember[];
+  members: Person[];
 };
 
-export type TripGroupMember = Tables<'trip_group_members'>;
+export type TripCompanionGroup = Tables<'trip_companion_groups'>;
+export type TripCompanionPerson = Tables<'trip_companion_people'>;
 
 export type OverlapWarning = {
   message: string;

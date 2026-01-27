@@ -15,7 +15,10 @@ export type TripOverviewPayload = {
   links: TripLinkInput[];
   tripTypes: string[];
   reflection?: string | null;
+  // Legacy single group. Prefer companionGroupIds.
   tripGroupId?: string | null;
+  companionGroupIds?: string[];
+  companionPersonIds?: string[];
 };
 
 export type TripUpdatePayload = Partial<Omit<TripOverviewPayload, 'links' | 'tripTypes'>> & {
@@ -46,6 +49,11 @@ export type TripDayUpdatePayload = {
 export type TripSuggestions = {
   hashtags: string[];
   tripTypes: string[];
+};
+
+export type PersonInput = {
+  firstName: string;
+  lastName?: string | null;
 };
 
 export type TripGroupMemberInput = {
@@ -146,7 +154,9 @@ export async function createTrip(
       endDate: payload.endDate,
       links: payload.links,
       tripTypes: payload.tripTypes,
-      tripGroupId: payload.tripGroupId ?? null
+      tripGroupId: payload.tripGroupId ?? null,
+      companionGroupIds: payload.companionGroupIds ?? [],
+      companionPersonIds: payload.companionPersonIds ?? []
     })
   });
 
@@ -160,7 +170,9 @@ export async function updateTrip(tripId: string, payload: TripUpdatePayload) {
     body: JSON.stringify({
       ...payload,
       reflection: payload.reflection ?? undefined,
-      tripGroupId: payload.tripGroupId ?? null
+      tripGroupId: payload.tripGroupId ?? null,
+      companionGroupIds: payload.companionGroupIds,
+      companionPersonIds: payload.companionPersonIds
     })
   });
 
@@ -200,6 +212,32 @@ export async function removePhoto(photoId: string): Promise<void> {
 export async function fetchTripSuggestions(): Promise<TripSuggestions> {
   const response = await fetch('/api/trips/suggestions', { cache: 'no-store' });
   return handleJson<TripSuggestions>(response);
+}
+
+export async function fetchPeople(): Promise<Tables<'people'>[]> {
+  const response = await fetch('/api/people', { cache: 'no-store' });
+  const { people } = await handleJson<{ people: Tables<'people'>[] }>(response);
+  return people;
+}
+
+export async function createPerson(payload: PersonInput): Promise<Tables<'people'>> {
+  const response = await fetch('/api/people', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const { person } = await handleJson<{ person: Tables<'people'> }>(response);
+  return person;
+}
+
+export async function updatePerson(personId: string, payload: Partial<PersonInput>): Promise<Tables<'people'>> {
+  const response = await fetch(`/api/people/${personId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const { person } = await handleJson<{ person: Tables<'people'> }>(response);
+  return person;
 }
 
 export async function fetchStatsSummary(): Promise<StatsSummary> {

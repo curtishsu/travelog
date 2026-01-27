@@ -308,6 +308,11 @@ export function TripGroupModal({
             })}
           </div>
           {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {mode === 'edit' ? (
+            <p className="text-sm text-amber-200">
+              Group changes will impact historical trips. Are you sure?
+            </p>
+          ) : null}
           <div className="flex flex-wrap justify-between gap-3">
             {mode === 'edit' && group?.id && onDelete ? (
               <Button

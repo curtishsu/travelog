@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
 
   const userId = user.id;
 
-  const { name, startDate, endDate, links, tripTypes, tripGroupId } = parsedResult.data;
+  const { name, startDate, endDate, links, tripTypes, tripGroupId, companionGroupIds, companionPersonIds } =
+    parsedResult.data;
 
   const startDateISO = toISODate(startDate);
   const endDateISO = toISODate(endDate);
@@ -79,29 +80,46 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    let resolvedTripGroupId: string | null = null;
+    const desiredGroupIds = Array.from(
+      new Set([...(companionGroupIds ?? []), ...(tripGroupId ? [tripGroupId] : [])])
+    );
+    const desiredPersonIds = Array.from(new Set(companionPersonIds ?? []));
 
-    if (tripGroupId) {
-      const { data: ownedGroup, error: groupError } = await supabase
+    if (desiredGroupIds.length) {
+      const { data: ownedGroups, error: groupError } = await supabase
         .from('trip_groups')
         .select('id')
-        .eq('id', tripGroupId)
         .eq('user_id', userId)
-        .maybeSingle();
-
+        .in('id', desiredGroupIds);
       if (groupError) {
-        console.error('[POST /api/trips] failed to verify trip group', groupError);
+        console.error('[POST /api/trips] failed to verify trip groups', groupError);
         return serverError('Failed to create trip.');
       }
-
-      const typedOwnedGroup = ownedGroup as { id: string } | null;
-
-      if (!typedOwnedGroup) {
+      const ownedGroupIds = new Set((ownedGroups ?? []).map((row) => (row as { id: string }).id));
+      const missing = desiredGroupIds.find((id) => !ownedGroupIds.has(id));
+      if (missing) {
         return badRequest('Trip group not found.');
       }
-
-      resolvedTripGroupId = typedOwnedGroup.id;
     }
+
+    if (desiredPersonIds.length) {
+      const { data: ownedPeople, error: peopleError } = await supabase
+        .from('people')
+        .select('id')
+        .eq('user_id', userId)
+        .in('id', desiredPersonIds);
+      if (peopleError) {
+        console.error('[POST /api/trips] failed to verify people', peopleError);
+        return serverError('Failed to create trip.');
+      }
+      const ownedPersonIds = new Set((ownedPeople ?? []).map((row) => (row as { id: string }).id));
+      const missing = desiredPersonIds.find((id) => !ownedPersonIds.has(id));
+      if (missing) {
+        return badRequest('Person not found.');
+      }
+    }
+
+    const resolvedTripGroupId = desiredGroupIds.length === 1 ? desiredGroupIds[0] : null;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tripsTable = supabase.from('trips') as any;
@@ -162,6 +180,34 @@ export async function POST(request: NextRequest) {
       const { error: typeError } = await tripTypesTable.insert(typeRows);
       if (typeError) {
         throw typeError;
+      }
+    }
+
+    if (desiredGroupIds.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripCompanionGroupsTable = supabase.from('trip_companion_groups') as any;
+      const { error: companionGroupsError } = await tripCompanionGroupsTable.insert(
+        desiredGroupIds.map((groupId) => ({
+          trip_id: insertedTrips.id,
+          trip_group_id: groupId
+        }))
+      );
+      if (companionGroupsError) {
+        throw companionGroupsError;
+      }
+    }
+
+    if (desiredPersonIds.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripCompanionPeopleTable = supabase.from('trip_companion_people') as any;
+      const { error: companionPeopleError } = await tripCompanionPeopleTable.insert(
+        desiredPersonIds.map((personId) => ({
+          trip_id: insertedTrips.id,
+          person_id: personId
+        }))
+      );
+      if (companionPeopleError) {
+        throw companionPeopleError;
       }
     }
 

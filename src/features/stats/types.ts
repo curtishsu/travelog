@@ -51,6 +51,19 @@ export type StatsSummary = {
   mostVisited: MostVisitedSummary;
   hashtagDistribution: Array<{ hashtag: string; dayCount: number; tripDays: HashtagTripDaySummary[] }>;
   tripTypeDistribution: Array<{ type: string; tripCount: number; trips: TripTypeSummary[] }>;
+  tripCompanionPersonDistribution: Array<{
+    personId: string;
+    firstName: string;
+    lastName: string | null;
+    tripCount: number;
+    trips: TripTypeSummary[];
+  }>;
+  tripCompanionGroupDistribution: Array<{
+    groupId: string;
+    groupName: string;
+    tripCount: number;
+    trips: TripTypeSummary[];
+  }>;
   tripTrendsYear: TrendTripBucket[];
   tripTrendsMonth: TrendTripBucket[];
   travelDayTrendsYear: TrendTravelDayBucket[];

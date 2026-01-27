@@ -3,6 +3,7 @@ import { Hash, MapPin } from 'lucide-react';
 import { PhotoGallery } from '@/features/photos/components/photo-gallery';
 import type { TripDayWithRelations } from '@/features/trips/types';
 import { formatDateForDisplay } from '@/lib/date';
+import { MinimalMarkdown } from '@/components/ui/minimal-markdown';
 
 type TripDaySectionProps = {
   day: TripDayWithRelations;
@@ -67,13 +68,13 @@ export function TripDaySection({ day, guestModeEnabled, isTripLocked }: TripDayS
           {!isDayMasked && hasHighlight ? (
             <div>
               <p className="font-semibold text-slate-100">Highlight</p>
-              <p className="mt-1 text-slate-300">{day.highlight}</p>
+              <MinimalMarkdown value={day.highlight ?? ''} className="mt-1" />
             </div>
           ) : null}
           {!isDayMasked && hasJournal ? (
             <div>
               <p className="font-semibold text-slate-100">Journal</p>
-              <p className="mt-1 whitespace-pre-line text-slate-300">{day.journal_entry}</p>
+              <MinimalMarkdown value={day.journal_entry ?? ''} className="mt-1" />
             </div>
           ) : null}
           {renderHashtags(day)}

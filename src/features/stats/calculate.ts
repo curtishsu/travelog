@@ -8,6 +8,9 @@ type TripDayRow = Database['public']['Tables']['trip_days']['Row'];
 type TripLocationRow = Database['public']['Tables']['trip_locations']['Row'];
 type TripDayHashtagRow = Database['public']['Tables']['trip_day_hashtags']['Row'];
 type TripTypeRow = Database['public']['Tables']['trip_types']['Row'];
+type TripCompanionGroupRow = Database['public']['Tables']['trip_companion_groups']['Row'];
+type TripCompanionPersonRow = Database['public']['Tables']['trip_companion_people']['Row'];
+type PersonRow = Database['public']['Tables']['people']['Row'];
 
 function selectDominantBucket(counts: Map<string, number>, fallback: string) {
   if (!counts.size) {
@@ -55,6 +58,8 @@ export async function calculateStats(
       mostVisited: null,
       hashtagDistribution: [],
       tripTypeDistribution: [],
+      tripCompanionPersonDistribution: [],
+      tripCompanionGroupDistribution: [],
       tripTrendsYear: [],
       tripTrendsMonth: [],
       travelDayTrendsYear: [],
@@ -78,7 +83,9 @@ export async function calculateStats(
   const [
     { data: tripLocationsData, error: locationsError },
     { data: tripDayHashtagsData, error: hashtagsError },
-    { data: tripTypesData, error: typesError }
+    { data: tripTypesData, error: typesError },
+    { data: tripCompanionGroupsData, error: companionGroupsError },
+    { data: tripCompanionPeopleData, error: companionPeopleError }
   ] = await Promise.all([
     tripDayIds.length
       ? supabase
@@ -92,7 +99,9 @@ export async function calculateStats(
           .select('trip_day_id,hashtag')
           .in('trip_day_id', tripDayIds)
       : Promise.resolve({ data: [], error: null }),
-    supabase.from('trip_types').select('trip_id,type').in('trip_id', tripIds)
+    supabase.from('trip_types').select('trip_id,type').in('trip_id', tripIds),
+    supabase.from('trip_companion_groups').select('trip_id,trip_group_id').in('trip_id', tripIds),
+    supabase.from('trip_companion_people').select('trip_id,person_id').in('trip_id', tripIds)
   ]);
 
   if (locationsError) {
@@ -104,13 +113,103 @@ export async function calculateStats(
   if (typesError) {
     throw typesError;
   }
+  if (companionGroupsError) {
+    throw companionGroupsError;
+  }
+  if (companionPeopleError) {
+    throw companionPeopleError;
+  }
 
   const tripLocations: TripLocationRow[] = tripLocationsData ?? [];
   const tripDayHashtags: TripDayHashtagRow[] = tripDayHashtagsData ?? [];
   const tripTypes: TripTypeRow[] = tripTypesData ?? [];
+  const tripCompanionGroups: TripCompanionGroupRow[] = (tripCompanionGroupsData ?? []) as TripCompanionGroupRow[];
+  const tripCompanionPeople: TripCompanionPersonRow[] = (tripCompanionPeopleData ?? []) as TripCompanionPersonRow[];
 
   const tripDayMap = new Map(tripDays.map((day) => [day.id, day]));
   const tripMap = new Map(trips.map((trip) => [trip.id, trip]));
+
+  const companionGroupsByTrip = new Map<string, Set<string>>();
+  for (const row of tripCompanionGroups) {
+    if (!companionGroupsByTrip.has(row.trip_id)) {
+      companionGroupsByTrip.set(row.trip_id, new Set());
+    }
+    companionGroupsByTrip.get(row.trip_id)!.add(row.trip_group_id);
+  }
+
+  const companionPeopleByTrip = new Map<string, Set<string>>();
+  for (const row of tripCompanionPeople) {
+    if (!companionPeopleByTrip.has(row.trip_id)) {
+      companionPeopleByTrip.set(row.trip_id, new Set());
+    }
+    companionPeopleByTrip.get(row.trip_id)!.add(row.person_id);
+  }
+
+  const allCompanionGroupIds = Array.from(
+    new Set(tripCompanionGroups.map((row) => row.trip_group_id))
+  );
+
+  const groupMemberIdsByGroup = new Map<string, Set<string>>();
+  const groupNameByGroup = new Map<string, string>();
+  const peopleById = new Map<string, PersonRow>();
+
+  if (allCompanionGroupIds.length) {
+    const { data: groupsData, error: groupsError } = await supabase
+      .from('trip_groups')
+      .select(
+        `
+          id,
+          name,
+          trip_group_people(
+            person_id,
+            person:people(id,first_name,last_name)
+          )
+        `
+      )
+      .eq('user_id', userId)
+      .in('id', allCompanionGroupIds);
+
+    if (groupsError) {
+      throw groupsError;
+    }
+
+    const typedGroups = (groupsData ?? []) as Array<{
+      id: string;
+      name: string;
+      trip_group_people: Array<{ person_id: string; person: PersonRow | null }>;
+    }>;
+
+    for (const group of typedGroups) {
+      groupNameByGroup.set(group.id, group.name);
+      const memberIds = new Set<string>();
+      for (const membership of group.trip_group_people ?? []) {
+        memberIds.add(membership.person_id);
+        if (membership.person) {
+          peopleById.set(membership.person.id, membership.person);
+        }
+      }
+      groupMemberIdsByGroup.set(group.id, memberIds);
+    }
+  }
+
+  const directPersonIds = Array.from(new Set(tripCompanionPeople.map((row) => row.person_id)));
+  const missingPersonIds = directPersonIds.filter((id) => !peopleById.has(id));
+
+  if (missingPersonIds.length) {
+    const { data: peopleData, error: peopleLoadError } = await supabase
+      .from('people')
+      .select('id,first_name,last_name')
+      .eq('user_id', userId)
+      .in('id', missingPersonIds);
+
+    if (peopleLoadError) {
+      throw peopleLoadError;
+    }
+
+    for (const person of (peopleData ?? []) as PersonRow[]) {
+      peopleById.set(person.id, person);
+    }
+  }
 
   const allDaysByTrip = new Map<string, TripDayRow[]>();
   const relevantDaysByTrip = new Map<string, TripDayRow[]>();
@@ -312,6 +411,62 @@ export async function calculateStats(
     }
   }
 
+  const companionPersonDistributionMap = new Map<
+    string,
+    { tripIds: Set<string>; trips: Map<string, { tripId: string; tripName: string }> }
+  >();
+  const companionGroupDistributionMap = new Map<
+    string,
+    { tripIds: Set<string>; trips: Map<string, { tripId: string; tripName: string }> }
+  >();
+
+  for (const tripId of completedTripIds) {
+    const trip = tripMap.get(tripId);
+    if (!trip) continue;
+
+    const selectedGroupIds = companionGroupsByTrip.get(tripId) ?? new Set<string>();
+    const selectedPersonIds = companionPeopleByTrip.get(tripId) ?? new Set<string>();
+
+    // Group distribution counts trips where the group was explicitly selected for the trip.
+    for (const groupId of selectedGroupIds) {
+      const bucket =
+        companionGroupDistributionMap.get(groupId) ??
+        (() => {
+          const init = { tripIds: new Set<string>(), trips: new Map<string, { tripId: string; tripName: string }>() };
+          companionGroupDistributionMap.set(groupId, init);
+          return init;
+        })();
+      bucket.tripIds.add(tripId);
+      if (!bucket.trips.has(tripId)) {
+        bucket.trips.set(tripId, { tripId, tripName: trip.name ?? 'Untitled trip' });
+      }
+    }
+
+    // Person distribution counts trips where the person is implied by selected groups OR selected directly.
+    const impliedPersonIds = new Set<string>(selectedPersonIds);
+    for (const groupId of selectedGroupIds) {
+      const members = groupMemberIdsByGroup.get(groupId);
+      if (!members) continue;
+      for (const personId of members) {
+        impliedPersonIds.add(personId);
+      }
+    }
+
+    for (const personId of impliedPersonIds) {
+      const bucket =
+        companionPersonDistributionMap.get(personId) ??
+        (() => {
+          const init = { tripIds: new Set<string>(), trips: new Map<string, { tripId: string; tripName: string }>() };
+          companionPersonDistributionMap.set(personId, init);
+          return init;
+        })();
+      bucket.tripIds.add(tripId);
+      if (!bucket.trips.has(tripId)) {
+        bucket.trips.set(tripId, { tripId, tripName: trip.name ?? 'Untitled trip' });
+      }
+    }
+  }
+
   const tripTrendsYearMap = new Map<string, Set<string>>();
   const tripTrendsMonthMap = new Map<string, Set<string>>();
   const travelDayTrendsYearMap = new Map<
@@ -434,6 +589,47 @@ export async function calculateStats(
           return b.tripCount - a.tripCount;
         }
         return a.type.localeCompare(b.type);
+      }),
+    tripCompanionPersonDistribution: Array.from(companionPersonDistributionMap.entries())
+      .map(([personId, detail]) => {
+        const person = peopleById.get(personId);
+        const tripsForPerson = Array.from(detail.trips.values()).sort((a, b) =>
+          a.tripName.localeCompare(b.tripName)
+        );
+        return {
+          personId,
+          firstName: person?.first_name ?? 'Unknown',
+          lastName: person?.last_name ?? null,
+          tripCount: detail.tripIds.size,
+          trips: tripsForPerson
+        };
+      })
+      .sort((a, b) => {
+        if (b.tripCount !== a.tripCount) {
+          return b.tripCount - a.tripCount;
+        }
+        const aName = `${a.firstName} ${a.lastName ?? ''}`.trim().toLowerCase();
+        const bName = `${b.firstName} ${b.lastName ?? ''}`.trim().toLowerCase();
+        return aName.localeCompare(bName);
+      }),
+    tripCompanionGroupDistribution: Array.from(companionGroupDistributionMap.entries())
+      .map(([groupId, detail]) => {
+        const groupName = groupNameByGroup.get(groupId) ?? 'Unknown group';
+        const tripsForGroup = Array.from(detail.trips.values()).sort((a, b) =>
+          a.tripName.localeCompare(b.tripName)
+        );
+        return {
+          groupId,
+          groupName,
+          tripCount: detail.tripIds.size,
+          trips: tripsForGroup
+        };
+      })
+      .sort((a, b) => {
+        if (b.tripCount !== a.tripCount) {
+          return b.tripCount - a.tripCount;
+        }
+        return a.groupName.localeCompare(b.groupName);
       }),
     tripTrendsYear: Array.from(tripTrendsYearMap.entries())
       .sort(([bucketA], [bucketB]) => Number(bucketA) - Number(bucketB))

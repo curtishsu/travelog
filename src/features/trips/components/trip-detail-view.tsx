@@ -2,6 +2,7 @@ import { TripDetailActions } from '@/features/trips/components/trip-detail-actio
 import { TripDaySection } from '@/features/trips/components/trip-day-section';
 import type { TripDetail } from '@/features/trips/types';
 import { formatDateRange } from '@/lib/date';
+import { MinimalMarkdown } from '@/components/ui/minimal-markdown';
 
 type TripDetailViewProps = {
   trip: TripDetail;
@@ -94,7 +95,7 @@ export function TripDetailView({ trip, guestModeEnabled }: TripDetailViewProps) 
       ) : trip.reflection ? (
         <section className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
           <h2 className="text-lg font-semibold text-white">Reflection</h2>
-          <p className="text-sm leading-relaxed text-slate-300 whitespace-pre-line">{trip.reflection}</p>
+          <MinimalMarkdown value={trip.reflection} className="text-sm leading-relaxed" />
         </section>
       ) : null}
       {trip.trip_links?.length ? (

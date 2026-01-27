@@ -11,12 +11,16 @@ export const tripGroupMemberSchema = z.object({
     .optional()
     .transform((value) => (value !== undefined ? value.trim() : value))
 }).superRefine((data, ctx) => {
+  // Member can be an existing person reference (id), or a new person payload.
+  // Per spec: last name is optional, first name is required when creating a person.
+  if (data.id) {
+    return;
+  }
   const first = data.firstName?.trim() ?? '';
-  const last = data.lastName?.trim() ?? '';
-  if (!first && !last) {
+  if (!first) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'First or last name is required',
+      message: 'First name is required',
       path: ['firstName']
     });
   }

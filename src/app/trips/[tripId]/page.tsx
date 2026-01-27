@@ -1,6 +1,8 @@
 import { TripDetailView } from '@/features/trips/components/trip-detail-view';
 import { loadTripDetail } from '@/features/trips/server';
 
+export const dynamic = 'force-dynamic';
+
 type TripDetailPageProps = {
   params: { tripId: string };
 };

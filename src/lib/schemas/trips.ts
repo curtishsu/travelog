@@ -19,7 +19,11 @@ export const tripCreateSchema = z
     endDate: z.coerce.date({ errorMap: () => ({ message: 'endDate must be a valid date' }) }),
     links: z.array(tripLinkSchema).max(20).optional().default([]),
     tripTypes: z.array(tripTypeSchema).max(10).optional().default([]),
-    tripGroupId: z.string().uuid().optional().nullable()
+    // Legacy single-group field (backwards compatible)
+    tripGroupId: z.string().uuid().optional().nullable(),
+    // New companions model (Option A): store selected group ids + person ids.
+    companionGroupIds: z.array(z.string().uuid()).max(50).optional().default([]),
+    companionPersonIds: z.array(z.string().uuid()).max(200).optional().default([])
   })
   .transform((data) => ({
     ...data,
@@ -38,6 +42,8 @@ export const tripUpdateSchema = z
     links: z.array(tripLinkSchema).max(20).optional(),
     tripTypes: z.array(tripTypeSchema).max(10).optional(),
     tripGroupId: z.string().uuid().nullable().optional(),
+    companionGroupIds: z.array(z.string().uuid()).max(50).optional(),
+    companionPersonIds: z.array(z.string().uuid()).max(200).optional(),
     isTripContentLocked: z.boolean().optional(),
     isReflectionLocked: z.boolean().optional()
   })
@@ -50,6 +56,8 @@ export const tripUpdateSchema = z
       data.links ||
       data.tripTypes ||
       data.tripGroupId !== undefined ||
+      data.companionGroupIds !== undefined ||
+      data.companionPersonIds !== undefined ||
       data.isTripContentLocked !== undefined ||
       data.isReflectionLocked !== undefined,
     { message: 'No fields provided for update' }

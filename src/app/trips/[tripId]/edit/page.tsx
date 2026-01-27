@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { TripEditor } from '@/features/trips/components/trip-editor';
 import { loadTripDetail } from '@/features/trips/server';
 
+export const dynamic = 'force-dynamic';
+
 type TripEditPageProps = {
   params: { tripId: string };
   searchParams: { tab?: string; overlap?: string };

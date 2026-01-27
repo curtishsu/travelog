@@ -13,9 +13,14 @@ type TripDetailResult = {
 };
 
 export async function loadTripDetail(tripId: string): Promise<TripDetailResult> {
-  const { supabase, user, isDemoMode } = await getSupabaseForRequest();
+  const { supabase, user, isDemoMode, authError } = await getSupabaseForRequest();
 
   if (!user && !isDemoMode) {
+    console.warn('[loadTripDetail] unauthenticated request, redirecting', {
+      tripId,
+      isDemoMode,
+      authError: authError instanceof Error ? authError.message : authError ?? null
+    });
     redirect('/auth/signin');
   }
 
@@ -33,10 +38,14 @@ export async function loadTripDetail(tripId: string): Promise<TripDetailResult> 
           photos(*),
           trip_day_hashtags(*)
         ),
-        trip_group:trip_groups(
+        trip_group:trip_groups!trips_trip_group_id_fkey(
           *,
-          members:trip_group_members(*)
-        )
+          members:trip_group_people(
+            person:people(*)
+          )
+        ),
+        trip_companion_groups(trip_group_id),
+        trip_companion_people(person_id)
       `
     )
     .eq('id', tripId)
@@ -60,6 +69,21 @@ export async function loadTripDetail(tripId: string): Promise<TripDetailResult> 
   ]);
 
   if (error || !data) {
+    console.error('[loadTripDetail] notFound() - failed to load trip', {
+      tripId,
+      userId: userId ?? null,
+      isDemoMode,
+      authError: authError instanceof Error ? authError.message : authError ?? null,
+      supabaseError: error
+        ? {
+            message: (error as { message?: string }).message ?? String(error),
+            details: (error as { details?: string }).details,
+            hint: (error as { hint?: string }).hint,
+            code: (error as { code?: string }).code
+          }
+        : null,
+      hasData: Boolean(data)
+    });
     notFound();
   }
 
@@ -74,7 +98,18 @@ export async function loadTripDetail(tripId: string): Promise<TripDetailResult> 
     .select('id, trip_id, type')
     .eq('trip_id', tripId);
 
-  const trip = normalizeTripDetail(data as TripDetail);
+  const rawTrip = data as unknown as TripDetail;
+  const trip = normalizeTripDetail(rawTrip);
+
+  const normalizedGroup = trip.trip_group
+    ? {
+        ...trip.trip_group,
+        // Supabase returns join rows; the app expects members to be people rows.
+        members: ((trip.trip_group as unknown as { members?: Array<{ person: unknown }> }).members ?? [])
+          .map((member) => member.person)
+          .filter(Boolean) as NonNullable<TripDetail['trip_group']>['members']
+      }
+    : null;
 
   // Debug: surface trip type shape arriving from Supabase
   console.log('[loadTripDetail] trip types snapshot', {
@@ -90,7 +125,10 @@ export async function loadTripDetail(tripId: string): Promise<TripDetailResult> 
   });
 
   return {
-    trip,
+    trip: {
+      ...trip,
+      trip_group: normalizedGroup
+    },
     guestModeEnabled
   };
 }
@@ -112,7 +150,10 @@ export type MapLocationEntry = {
   hashtags: string[];
 };
 
-export async function loadMapLocations(): Promise<MapLocationEntry[]> {
+export async function loadMapLocations(filters?: {
+  personId?: string | null;
+  groupId?: string | null;
+}): Promise<MapLocationEntry[]> {
   const { supabase, user, isDemoMode } = await getSupabaseForRequest();
 
   if (!user && !isDemoMode) {
@@ -120,7 +161,78 @@ export async function loadMapLocations(): Promise<MapLocationEntry[]> {
   }
 
   const userId = user?.id ?? '';
-  const { data, error } = await supabase
+
+  const personId = filters?.personId ?? null;
+  const groupId = filters?.groupId ?? null;
+
+  let allowedTripIds: string[] | null = null;
+
+  if (personId || groupId) {
+    const tripIds = new Set<string>();
+
+    if (groupId) {
+      const { data: groupTrips, error: groupTripsError } = await supabase
+        .from('trip_companion_groups')
+        .select('trip_id, trips!inner(user_id)')
+        .eq('trip_group_id', groupId)
+        .eq('trips.user_id', userId);
+
+      if (groupTripsError) {
+        console.error('[loadMapLocations] failed to filter by group', groupTripsError);
+      } else {
+        for (const row of (groupTrips ?? []) as Array<{ trip_id: string }>) {
+          tripIds.add(row.trip_id);
+        }
+      }
+    }
+
+    if (personId) {
+      const { data: directTrips, error: directTripsError } = await supabase
+        .from('trip_companion_people')
+        .select('trip_id, trips!inner(user_id)')
+        .eq('person_id', personId)
+        .eq('trips.user_id', userId);
+
+      if (directTripsError) {
+        console.error('[loadMapLocations] failed to filter by person (direct)', directTripsError);
+      } else {
+        for (const row of (directTrips ?? []) as Array<{ trip_id: string }>) {
+          tripIds.add(row.trip_id);
+        }
+      }
+
+      const { data: groupRows, error: groupRowsError } = await supabase
+        .from('trip_groups')
+        .select('id, trip_group_people!inner(person_id)')
+        .eq('user_id', userId)
+        .eq('trip_group_people.person_id', personId);
+
+      if (groupRowsError) {
+        console.error('[loadMapLocations] failed to resolve groups for person', groupRowsError);
+      } else {
+        const groupIdsForPerson = (groupRows ?? []).map((row) => (row as { id: string }).id);
+        if (groupIdsForPerson.length) {
+          const { data: impliedTrips, error: impliedTripsError } = await supabase
+            .from('trip_companion_groups')
+            .select('trip_id, trips!inner(user_id)')
+            .in('trip_group_id', groupIdsForPerson)
+            .eq('trips.user_id', userId);
+
+          if (impliedTripsError) {
+            console.error('[loadMapLocations] failed to filter by person (via groups)', impliedTripsError);
+          } else {
+            for (const row of (impliedTrips ?? []) as Array<{ trip_id: string }>) {
+              tripIds.add(row.trip_id);
+            }
+          }
+        }
+      }
+    }
+
+    allowedTripIds = Array.from(tripIds);
+  }
+
+  const tripsQuery = supabase
     .from('trips')
     .select(
       `
@@ -137,6 +249,14 @@ export async function loadMapLocations(): Promise<MapLocationEntry[]> {
       `
     )
     .eq('user_id', userId);
+
+  if (allowedTripIds && allowedTripIds.length > 0) {
+    tripsQuery.in('id', allowedTripIds);
+  } else if (allowedTripIds && allowedTripIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await tripsQuery;
 
   if (error || !data) {
     return [];

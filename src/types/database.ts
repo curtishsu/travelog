@@ -3,6 +3,25 @@ export type TripStatus = 'draft' | 'active' | 'completed';
 export type Database = {
   public: {
     Tables: {
+      people: {
+        Row: {
+          id: string;
+          user_id: string;
+          first_name: string;
+          last_name: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          first_name: string;
+          last_name?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['people']['Insert']>;
+      };
       trips: {
         Row: {
           id: string;
@@ -192,6 +211,45 @@ export type Database = {
         };
         Update: Partial<Database['public']['Tables']['trip_group_members']['Insert']>;
       };
+      trip_group_people: {
+        Row: {
+          trip_group_id: string;
+          person_id: string;
+          created_at: string;
+        };
+        Insert: {
+          trip_group_id: string;
+          person_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['trip_group_people']['Insert']>;
+      };
+      trip_companion_groups: {
+        Row: {
+          trip_id: string;
+          trip_group_id: string;
+          created_at: string;
+        };
+        Insert: {
+          trip_id: string;
+          trip_group_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['trip_companion_groups']['Insert']>;
+      };
+      trip_companion_people: {
+        Row: {
+          trip_id: string;
+          person_id: string;
+          created_at: string;
+        };
+        Insert: {
+          trip_id: string;
+          person_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['trip_companion_people']['Insert']>;
+      };
       user_settings: {
         Row: {
           user_id: string;
@@ -215,6 +273,10 @@ export type Database = {
       };
       is_owner_of_trip_day: {
         Args: { trip_day_id: string };
+        Returns: boolean;
+      };
+      is_owner_of_person: {
+        Args: { person_id: string };
         Returns: boolean;
       };
     };
