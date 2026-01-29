@@ -240,6 +240,16 @@ export async function updatePerson(personId: string, payload: Partial<PersonInpu
   return person;
 }
 
+export async function deletePerson(personId: string): Promise<void> {
+  const response = await fetch(`/api/people/${personId}`, {
+    method: 'DELETE'
+  });
+
+  if (!response.ok) {
+    await handleJson(response);
+  }
+}
+
 export async function fetchStatsSummary(): Promise<StatsSummary> {
   const response = await fetch('/api/stats', { cache: 'no-store' });
   return handleJson<StatsSummary>(response);

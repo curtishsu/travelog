@@ -23,6 +23,7 @@ import {
   fetchPeople,
   createPerson,
   updatePerson,
+  deletePerson,
   type PersonInput
 } from '@/features/trips/api';
 import type { TripDetail, TripGroup } from '@/features/trips/types';
@@ -178,6 +179,25 @@ export function useUpdatePerson(options?: UseMutationOptions<Awaited<ReturnType<
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ personId, payload }) => updatePerson(personId, payload),
+    onSuccess: async (...args) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: peopleKey }),
+        queryClient.invalidateQueries({ queryKey: tripGroupsKey }),
+        queryClient.invalidateQueries({ queryKey: tripsListKey }),
+        queryClient.invalidateQueries({ queryKey: ['trip'] })
+      ]);
+      options?.onSuccess?.(...args);
+    },
+    ...options
+  });
+}
+
+export function useDeletePerson(
+  options?: UseMutationOptions<void, Error, { personId: string }>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ personId }) => deletePerson(personId),
     onSuccess: async (...args) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: peopleKey }),

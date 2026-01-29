@@ -5,14 +5,23 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import mapboxgl from 'mapbox-gl';
 import type { Geometry, GeometryCollection } from 'geojson';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Compass, Globe2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Globe2, SlidersHorizontal, X } from 'lucide-react';
 
 import type { MapLocationEntry } from '@/features/trips/server';
 import { Button } from '@/components/ui/button';
 import { env } from '@/lib/env';
 import { formatDateForDisplay } from '@/lib/date';
+import {
+  buildTripGroupMembersIndex,
+  filterTripIds,
+  type TripFilterClause,
+  type TripFilterTripMeta
+} from '@/features/trips/filtering';
+import { TripFiltersDialog } from '@/features/trips/components/trip-filters-dialog';
+import { useTripGroups } from '@/features/trips/hooks';
 
 type GroupingMode = 'city' | 'country';
+type GroupByMode = 'none' | 'year' | 'tripType';
 
 const COUNTRY_SOURCE_ID = 'globe-country-boundaries';
 const COUNTRY_FILL_LAYER_ID = 'globe-country-fill';
@@ -23,7 +32,7 @@ type MapboxExpression = Exclude<Parameters<mapboxgl.Map['setFilter']>[1], undefi
 type MapboxPaintValue = Exclude<Parameters<mapboxgl.Map['setPaintProperty']>[2], undefined>;
 type GeometryWithCoordinates = Exclude<Geometry, GeometryCollection>;
 const CITY_MARKER_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="26" height="26" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34" fill="none">
   <path
     d="M12 22s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11Z"
     fill="currentColor"
@@ -44,6 +53,7 @@ type LocationGroup = {
   entries: Array<{
     tripId: string;
     tripName: string;
+    tripTypes: string[];
     date: string;
     dayIndex: number;
     highlight: string | null;
@@ -60,6 +70,11 @@ export function MapGlobe({ locations }: MapGlobeProps) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [mode, setMode] = useState<GroupingMode>('city');
+  const [groupBy, setGroupBy] = useState<GroupByMode>('none');
+  const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterClauses, setFilterClauses] = useState<TripFilterClause[]>([]);
+  const [draftFilterClauses, setDraftFilterClauses] = useState<TripFilterClause[]>([]);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -67,7 +82,44 @@ export function MapGlobe({ locations }: MapGlobeProps) {
   const focusedGroupIdRef = useRef<string | null>(null);
   const selectedGroupIdRef = useRef<string | null>(null);
 
-  const groups = useMemo(() => groupLocations(locations, mode), [locations, mode]);
+  const { data: tripGroups } = useTripGroups();
+  const groupMembersIndex = useMemo(
+    () => buildTripGroupMembersIndex(tripGroups ?? []),
+    [tripGroups]
+  );
+
+  const tripMetas = useMemo(() => {
+    const map = new Map<string, TripFilterTripMeta>();
+    for (const entry of locations) {
+      if (!map.has(entry.tripId)) {
+        map.set(entry.tripId, {
+          tripId: entry.tripId,
+          startDate: entry.tripStartDate,
+          endDate: entry.tripEndDate,
+          tripTypes: entry.tripTypes ?? [],
+          companionGroupIds: entry.companionGroupIds ?? [],
+          companionPersonIds: entry.companionPersonIds ?? []
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [locations]);
+
+  const allowedTripIds = useMemo(
+    () => filterTripIds(tripMetas, filterClauses, groupMembersIndex),
+    [tripMetas, filterClauses, groupMembersIndex]
+  );
+
+  const visibleLocations = useMemo(
+    () => locations.filter((entry) => allowedTripIds.has(entry.tripId)),
+    [locations, allowedTripIds]
+  );
+
+  const groups = useMemo(() => groupLocations(visibleLocations, mode), [visibleLocations, mode]);
+  const hasActiveFilters = useMemo(
+    () => (filterClauses ?? []).some(isTripFilterClauseActive),
+    [filterClauses]
+  );
   const selectedGroup = useMemo(
     () => groups.find((group) => group.id === selectedGroupId) ?? null,
     [groups, selectedGroupId]
@@ -131,11 +183,21 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       return;
     }
 
+    const { groupKeyToColor, otherColor, getEntryKeysForGroupBy } = computeGroupByPalette(
+      visibleLocations,
+      groupBy
+    );
+
     groups.forEach((group) => {
       const markerEl = document.createElement('div');
-      markerEl.className =
-        'group-marker flex h-10 w-10 items-center justify-center rounded-full bg-brand shadow-lg shadow-brand/40 ring-4 ring-brand/20';
-      markerEl.innerHTML = CITY_MARKER_SVG;
+      markerEl.className = 'group-marker flex h-12 w-12 items-center justify-center';
+      const markerColors = getMarkerColorsForGroup(group, {
+        groupKeyToColor,
+        otherColor,
+        getEntryKeysForGroupBy
+      });
+      markerEl.innerHTML = buildCityMarkerSvg(markerColors);
+      applyMarkerChrome(markerEl, markerColors[0] ?? otherColor);
       markerEl.style.cursor = 'pointer';
       markerEl.setAttribute('aria-label', group.label);
       markerEl.addEventListener('click', () => {
@@ -172,7 +234,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       validGroups.forEach((group) => bounds.extend([group.lng, group.lat]));
       map.fitBounds(bounds, { padding: 100, maxZoom: 5.2 });
     }
-  }, [groups, mode, mapLoaded]);
+  }, [groups, mode, mapLoaded, groupBy, visibleLocations]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -198,6 +260,15 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       return;
     }
 
+    applyCountryGroupByPaint(map, {
+      mode,
+      groupBy,
+      visibleLocations,
+      groups,
+      fillLayerId,
+      outlineLayerId
+    });
+
     const targetNames = groups
       .map((group) => group.country)
       .filter(Boolean)
@@ -222,7 +293,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       groups.forEach((group) => bounds.extend([group.lng, group.lat]));
       map.fitBounds(bounds, { padding: 120, maxZoom: 4.3 });
     }
-  }, [mapLoaded, mode, groups]);
+  }, [mapLoaded, mode, groups, groupBy, visibleLocations]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -374,24 +445,141 @@ export function MapGlobe({ locations }: MapGlobeProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3 text-sm font-semibold text-white">
-          <Compass className="h-5 w-5 text-brand" />
-          <span>Viewing by</span>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-3xl font-semibold text-white">Globe</h1>
+          <div className="relative">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setControlsMenuOpen((prev) => !prev)}
+            >
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              Controls
+            </Button>
+            {controlsMenuOpen ? (
+              <div className="absolute right-0 top-10 z-40 w-56 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-xl">
+                <button
+                  type="button"
+                  className="w-full px-4 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800"
+                  onClick={() => {
+                    setDraftFilterClauses(filterClauses);
+                    setFiltersOpen(true);
+                    setControlsMenuOpen(false);
+                  }}
+                >
+                  Filter…
+                </button>
+                <div className="border-t border-slate-800 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Group by
+                </div>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-800"
+                  onClick={() => {
+                    setGroupBy('year');
+                    setControlsMenuOpen(false);
+                  }}
+                >
+                  <span>Year</span>
+                  {groupBy === 'year' ? <span className="text-xs text-brand">Active</span> : null}
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-800"
+                  onClick={() => {
+                    setGroupBy('tripType');
+                    setControlsMenuOpen(false);
+                  }}
+                >
+                  <span>Trip Type</span>
+                  {groupBy === 'tripType' ? <span className="text-xs text-brand">Active</span> : null}
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-3 text-left text-sm text-slate-400 hover:bg-slate-800"
+                  onClick={() => {
+                    setGroupBy('none');
+                    setControlsMenuOpen(false);
+                  }}
+                >
+                  Clear group by
+                </button>
+                <div className="border-t border-slate-800" />
+                <button
+                  type="button"
+                  className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800"
+                  onClick={() => {
+                    setGroupBy('none');
+                    setFilterClauses([]);
+                    setDraftFilterClauses([]);
+                    setControlsMenuOpen(false);
+                  }}
+                >
+                  Clear all
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        {hasActiveFilters && (
+          <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200 hover:border-slate-500"
+                  onClick={() => {
+                    setFilterClauses([]);
+                    setDraftFilterClauses([]);
+                  }}
+                  aria-label="Clear filters"
+                >
+                  <span>Filtered</span>
+                  <X className="h-3.5 w-3.5 opacity-80" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
+      <TripFiltersDialog
+        open={filtersOpen}
+        clauses={draftFilterClauses}
+        onChange={setDraftFilterClauses}
+        onClose={() => setFiltersOpen(false)}
+        onApply={() => {
+          setFilterClauses(draftFilterClauses);
+        }}
+        title="Filter globe"
+      />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/60 p-1">
           {(['city', 'country'] as GroupingMode[]).map((option) => (
             <Button
               key={option}
               type="button"
               variant={option === mode ? 'primary' : 'secondary'}
               size="sm"
+              className="h-8"
               onClick={() => setMode(option)}
             >
               {option.charAt(0).toUpperCase() + option.slice(1)}
             </Button>
           ))}
         </div>
+        {groupBy !== 'none' ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-200 hover:border-slate-500"
+            onClick={() => setGroupBy('none')}
+            aria-label="Clear group by"
+          >
+            <span>Group: {groupBy === 'year' ? 'Year' : 'Trip type'}</span>
+            <X className="h-3.5 w-3.5 opacity-80" />
+          </button>
+        ) : null}
       </div>
       <div className="relative">
         <div ref={mapContainerRef} className="h-[480px] w-full overflow-hidden rounded-3xl border border-slate-800" />
@@ -470,6 +658,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
           </>
         ) : null}
       </div>
+      {groupBy !== 'none' ? <GroupByLegend groupBy={groupBy} locations={visibleLocations} /> : null}
     </div>
   );
 }
@@ -506,6 +695,7 @@ function groupLocations(locations: MapLocationEntry[], mode: GroupingMode): Loca
     group.entries.push({
       tripId: location.tripId,
       tripName: location.tripName,
+      tripTypes: location.tripTypes ?? [],
       date: location.date,
       dayIndex: location.dayIndex,
       highlight: location.highlight,
@@ -514,6 +704,230 @@ function groupLocations(locations: MapLocationEntry[], mode: GroupingMode): Loca
   }
 
   return Array.from(map.values());
+}
+
+const GROUP_BY_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ef4444', '#f97316'] as const;
+
+function computeGroupByPalette(locations: MapLocationEntry[], groupBy: GroupByMode) {
+  const getEntryKeysForGroupBy = (entry: Pick<MapLocationEntry, 'date' | 'tripTypes'>): string[] => {
+    if (groupBy === 'year') {
+      const year = entry.date?.slice(0, 4);
+      return year ? [year] : [];
+    }
+    if (groupBy === 'tripType') {
+      return (entry.tripTypes ?? []).map((value) => value.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  if (groupBy === 'none') {
+    return {
+      groupKeyToColor: new Map<string, string>(),
+      otherColor: '#2563EB',
+      topKeys: [] as string[],
+      getEntryKeysForGroupBy
+    };
+  }
+
+  const counts = new Map<string, number>();
+  for (const entry of locations) {
+    for (const key of getEntryKeysForGroupBy(entry)) {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const topKeys = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([key]) => key);
+
+  const groupKeyToColor = new Map<string, string>();
+  topKeys.forEach((key, idx) => {
+    groupKeyToColor.set(key, GROUP_BY_COLORS[idx]);
+  });
+
+  const otherColor = GROUP_BY_COLORS[5];
+
+  return { groupKeyToColor, otherColor, topKeys, getEntryKeysForGroupBy };
+}
+
+function getMarkerColorsForGroup(
+  group: LocationGroup,
+  opts: {
+    groupKeyToColor: Map<string, string>;
+    otherColor: string;
+    getEntryKeysForGroupBy: (entry: Pick<LocationGroup['entries'][number], 'date' | 'tripTypes'>) => string[];
+  }
+): string[] {
+  const { groupKeyToColor, otherColor, getEntryKeysForGroupBy } = opts;
+
+  const keyCounts = new Map<string, number>();
+  for (const entry of group.entries) {
+    for (const key of getEntryKeysForGroupBy(entry)) {
+      keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  if (!keyCounts.size) {
+    return [otherColor];
+  }
+
+  const sortedKeys = Array.from(keyCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([key]) => key);
+
+  const mapped = sortedKeys.map((key) => groupKeyToColor.get(key) ?? otherColor);
+  const unique = Array.from(new Set(mapped));
+
+  if (unique.length <= 1) {
+    return [unique[0] ?? otherColor];
+  }
+
+  return unique.slice(0, 2);
+}
+
+function buildCityMarkerSvg(colors: string[]) {
+  const primary = colors[0] ?? '#38bdf8';
+  const secondary = colors[1] ?? null;
+
+  if (!secondary) {
+    return CITY_MARKER_SVG.replace('fill="currentColor"', `fill="${primary}"`);
+  }
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34" fill="none">
+  <defs>
+    <pattern id="stripes" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="3" height="6" fill="${primary}" />
+      <rect x="3" width="3" height="6" fill="${secondary}" />
+    </pattern>
+  </defs>
+  <path
+    d="M12 22s-7-5-7-11a7 7 0 0 1 14 0c0 6-7 11-7 11Z"
+    fill="url(#stripes)"
+    fill-opacity="0.9"
+  />
+  <circle cx="12" cy="11" r="3.2" fill="#0f172a" />
+</svg>
+`;
+  return svg.trim();
+}
+
+function applyMarkerChrome(markerEl: HTMLDivElement, color: string) {
+  markerEl.style.filter = 'drop-shadow(0 16px 22px rgba(0,0,0,0.45))';
+  markerEl.style.borderRadius = '9999px';
+  void color;
+}
+
+function applyCountryGroupByPaint(
+  map: mapboxgl.Map,
+  args: {
+    mode: GroupingMode;
+    groupBy: GroupByMode;
+    visibleLocations: MapLocationEntry[];
+    groups: LocationGroup[];
+    fillLayerId: string;
+    outlineLayerId: string;
+  }
+) {
+  const { groupBy, visibleLocations, groups, fillLayerId, outlineLayerId } = args;
+
+  if (groupBy === 'none') {
+    map.setPaintProperty(fillLayerId, 'fill-color', '#2563EB');
+    map.setPaintProperty(outlineLayerId, 'line-color', '#2563EB');
+    return;
+  }
+
+  const { groupKeyToColor, otherColor, getEntryKeysForGroupBy } = computeGroupByPalette(
+    visibleLocations,
+    groupBy
+  );
+
+  const countryToColor = new Map<string, string>();
+
+  for (const group of groups) {
+    const countryName = normalizeName(group.country);
+    if (!countryName) continue;
+
+    const keyCounts = new Map<string, number>();
+    for (const entry of group.entries) {
+      for (const key of getEntryKeysForGroupBy(entry)) {
+        keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
+      }
+    }
+
+    const topKey = Array.from(keyCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const color = topKey ? groupKeyToColor.get(topKey) ?? otherColor : otherColor;
+    countryToColor.set(countryName, color);
+  }
+
+  const buckets = new Map<string, string[]>();
+  for (const [countryName, color] of countryToColor.entries()) {
+    const list = buckets.get(color) ?? [];
+    list.push(countryName);
+    buckets.set(color, list);
+  }
+
+  const input = ['downcase', ['coalesce', ['get', 'name_en'], ['get', 'name'], '']] as MapboxExpression;
+  const expression: MapboxPaintValue = ['match', input];
+  for (const [color, names] of buckets.entries()) {
+    expression.push(names);
+    expression.push(color);
+  }
+  expression.push(otherColor);
+
+  map.setPaintProperty(fillLayerId, 'fill-color', expression);
+  map.setPaintProperty(outlineLayerId, 'line-color', '#0f172a');
+}
+
+function isTripFilterClauseActive(clause: TripFilterClause) {
+  if (clause.kind === 'dateRange') {
+    return Boolean(clause.startDate || clause.endDate);
+  }
+  if (clause.kind === 'tripType') {
+    return clause.tripTypes.length > 0;
+  }
+  if (clause.kind === 'tripGroup') {
+    return clause.tripGroupIds.length > 0;
+  }
+  if (clause.kind === 'tripPeople') {
+    return clause.personIds.length > 0;
+  }
+  return false;
+}
+
+function GroupByLegend({ groupBy, locations }: { groupBy: Exclude<GroupByMode, 'none'>; locations: MapLocationEntry[] }) {
+  const { groupKeyToColor, otherColor, topKeys } = computeGroupByPalette(locations, groupBy);
+  const title = groupBy === 'year' ? 'Group by year' : 'Group by trip type';
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+        {topKeys.map((key) => {
+          const color = groupKeyToColor.get(key) ?? otherColor;
+          return (
+            <div key={key} className="flex items-center gap-2 text-sm text-slate-200">
+              <span
+                className="h-3 w-3 rounded-sm border border-black/30"
+                style={{ backgroundColor: color }}
+                aria-hidden
+              />
+              <span className="text-sm">{key}</span>
+            </div>
+          );
+        })}
+        <div className="flex items-center gap-2 text-sm text-slate-300">
+          <span
+            className="h-3 w-3 rounded-sm border border-black/30"
+            style={{ backgroundColor: otherColor }}
+            aria-hidden
+          />
+          <span className="text-sm">Other</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ensureCountryLayers(map: mapboxgl.Map) {

@@ -3,9 +3,8 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
-import { TripCard } from '@/features/trips/components/trip-card';
-import { useTripGroups, useTripsList } from '@/features/trips/hooks';
 import { Button } from '@/components/ui/button';
+import { TripCard } from '@/features/trips/components/trip-card';
 import { TripFiltersDialog } from '@/features/trips/components/trip-filters-dialog';
 import {
   buildTripGroupMembersIndex,
@@ -13,20 +12,13 @@ import {
   type TripFilterClause,
   type TripFilterTripMeta
 } from '@/features/trips/filtering';
+import { useTripGroups, useTripsList } from '@/features/trips/hooks';
 
 function isClauseActive(clause: TripFilterClause) {
-  if (clause.kind === 'dateRange') {
-    return Boolean(clause.startDate || clause.endDate);
-  }
-  if (clause.kind === 'tripType') {
-    return clause.tripTypes.length > 0;
-  }
-  if (clause.kind === 'tripGroup') {
-    return clause.tripGroupIds.length > 0;
-  }
-  if (clause.kind === 'tripPeople') {
-    return clause.personIds.length > 0;
-  }
+  if (clause.kind === 'dateRange') return Boolean(clause.startDate || clause.endDate);
+  if (clause.kind === 'tripType') return clause.tripTypes.length > 0;
+  if (clause.kind === 'tripGroup') return clause.tripGroupIds.length > 0;
+  if (clause.kind === 'tripPeople') return clause.personIds.length > 0;
   return false;
 }
 
@@ -49,7 +41,7 @@ function TripsListSkeleton() {
   );
 }
 
-export function TripsList() {
+export function JournalTrips() {
   const { data, isLoading, isError, refetch } = useTripsList();
   const { data: tripGroups } = useTripGroups();
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -92,81 +84,78 @@ export function TripsList() {
     [data, allowedTripIds]
   );
 
-  if (isLoading) {
-    return <TripsListSkeleton />;
-  }
-
-  if (isError) {
-    return (
-      <div className="rounded-3xl border border-red-500/40 bg-red-500/10 p-8 text-center text-red-200">
-        <p className="text-lg font-semibold">We couldn’t load your trips.</p>
-        <p className="mt-2 text-sm text-red-100/80">
-          Please check your connection and try again.
-        </p>
-        <Button className="mt-6" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  if (!data?.length) {
-    return (
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
-        <h3 className="text-2xl font-semibold text-white">Start your first trip</h3>
-        <p className="mt-3 text-sm text-slate-400">
-          Capture every day, hashtag, and photo. Begin by creating your first trip.
-        </p>
-        <Button asChild className="mt-6">
-          <Link href="/trips/new">Create trip</Link>
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setDraftFilterClauses(filterClauses);
-            setFiltersOpen(true);
-          }}
-        >
-          Filter
-        </Button>
-        {hasActiveFilters ? (
+    <div className="space-y-8">
+      <header className="flex items-center justify-between gap-3">
+        <h1 className="text-3xl font-semibold text-white">Journal</h1>
+        <div className="flex items-center gap-2">
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={() => {
-              setFilterClauses([]);
-              setDraftFilterClauses([]);
+              setDraftFilterClauses(filterClauses);
+              setFiltersOpen(true);
             }}
           >
-            Clear filter
+            Filter
           </Button>
-        ) : null}
-      </div>
+          {hasActiveFilters ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterClauses([]);
+                setDraftFilterClauses([]);
+              }}
+            >
+              Clear filter
+            </Button>
+          ) : null}
+        </div>
+      </header>
+
       <TripFiltersDialog
         open={filtersOpen}
         clauses={draftFilterClauses}
         onChange={setDraftFilterClauses}
         onClose={() => setFiltersOpen(false)}
-        onApply={() => {
-          setFilterClauses(draftFilterClauses);
-        }}
+        onApply={() => setFilterClauses(draftFilterClauses)}
         title="Filter journal"
       />
-      <div className="grid gap-4">
-        {visibleTrips.map((trip) => (
-          <TripCard key={trip.id} trip={trip} />
-        ))}
-      </div>
+
+      {isLoading ? <TripsListSkeleton /> : null}
+
+      {isError ? (
+        <div className="rounded-3xl border border-red-500/40 bg-red-500/10 p-8 text-center text-red-200">
+          <p className="text-lg font-semibold">We couldn’t load your trips.</p>
+          <p className="mt-2 text-sm text-red-100/80">Please check your connection and try again.</p>
+          <Button className="mt-6" onClick={() => refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {!isLoading && !isError && !data?.length ? (
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
+          <h3 className="text-2xl font-semibold text-white">Start your first trip</h3>
+          <p className="mt-3 text-sm text-slate-400">
+            Capture every day, hashtag, and photo. Begin by creating your first trip.
+          </p>
+          <Button asChild className="mt-6">
+            <Link href="/trips/new">Create trip</Link>
+          </Button>
+        </div>
+      ) : null}
+
+      {!isLoading && !isError && data?.length ? (
+        <div className="grid gap-4">
+          {visibleTrips.map((trip) => (
+            <TripCard key={trip.id} trip={trip} showViewTripBadge={false} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

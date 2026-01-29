@@ -143,6 +143,11 @@ export type MapLocationEntry = {
   lng: number;
   tripId: string;
   tripName: string;
+  tripStartDate: string;
+  tripEndDate: string;
+  tripTypes: string[];
+  companionGroupIds: string[];
+  companionPersonIds: string[];
   tripDayId: string;
   dayIndex: number;
   date: string;
@@ -238,6 +243,11 @@ export async function loadMapLocations(filters?: {
       `
         id,
         name,
+        start_date,
+        end_date,
+        trip_types(type),
+        trip_companion_groups(trip_group_id),
+        trip_companion_people(person_id),
         trip_days(
           id,
           date,
@@ -264,6 +274,9 @@ export async function loadMapLocations(filters?: {
 
   const typedTrips = data as Array<
     Database['public']['Tables']['trips']['Row'] & {
+      trip_types?: Array<{ type: string }>;
+      trip_companion_groups?: Array<{ trip_group_id: string }>;
+      trip_companion_people?: Array<{ person_id: string }>;
       trip_days: Array<
         Database['public']['Tables']['trip_days']['Row'] & {
           trip_locations: Database['public']['Tables']['trip_locations']['Row'][];
@@ -276,6 +289,38 @@ export async function loadMapLocations(filters?: {
   const entries: MapLocationEntry[] = [];
 
   for (const trip of typedTrips) {
+    const tripTypes = Array.from(
+      new Set(
+        (
+          (trip as unknown as { trip_types?: Array<{ type: string | null } | null> }).trip_types ?? []
+        )
+          .map((row) => row?.type ?? null)
+          .filter(Boolean) as string[]
+      )
+    );
+
+    const companionGroupIds = Array.from(
+      new Set(
+        (
+          (trip as unknown as { trip_companion_groups?: Array<{ trip_group_id: string | null } | null> })
+            .trip_companion_groups ?? []
+        )
+          .map((row) => row?.trip_group_id ?? null)
+          .filter(Boolean) as string[]
+      )
+    );
+
+    const companionPersonIds = Array.from(
+      new Set(
+        (
+          (trip as unknown as { trip_companion_people?: Array<{ person_id: string | null } | null> })
+            .trip_companion_people ?? []
+        )
+          .map((row) => row?.person_id ?? null)
+          .filter(Boolean) as string[]
+      )
+    );
+
     for (const tripDay of trip.trip_days ?? []) {
       const hashtags = (tripDay.trip_day_hashtags ?? []).map((tag) => tag.hashtag);
       for (const location of tripDay.trip_locations ?? []) {
@@ -289,6 +334,11 @@ export async function loadMapLocations(filters?: {
           lng: location.lng,
           tripId: trip.id,
           tripName: trip.name,
+          tripStartDate: (trip as unknown as { start_date: string }).start_date,
+          tripEndDate: (trip as unknown as { end_date: string }).end_date,
+          tripTypes,
+          companionGroupIds,
+          companionPersonIds,
           tripDayId: tripDay.id,
           dayIndex: tripDay.day_index,
           date: tripDay.date,

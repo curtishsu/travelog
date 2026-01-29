@@ -21,6 +21,10 @@ Functionality:
 - Once a filter is turned on, then the dots will be udpated
 - There is a way to clear filter
 - Filters are restarted when the app is closed
+- Filter semantics (important)
+    - Multiple filter clauses combine with AND (each new clause narrows results)
+    - Multi-select values within a clause use OR (match ANY selected value)
+        - Trip people: trip matches if it includes ANY selected person
 
 User Flow:
 

@@ -8,6 +8,7 @@ import { formatDateRange } from '@/lib/date';
 
 type TripCardProps = {
   trip: TripSummary;
+  showViewTripBadge?: boolean;
 };
 
 function getDistinctHashtags(trip: TripSummary) {
@@ -22,7 +23,7 @@ function getDistinctHashtags(trip: TripSummary) {
   return Array.from(tags);
 }
 
-export function TripCard({ trip }: TripCardProps) {
+export function TripCard({ trip, showViewTripBadge = true }: TripCardProps) {
   const tripTypes = trip.trip_types ?? [];
   const typeCount = tripTypes.length;
   const distinctHashtags = getDistinctHashtags(trip);
@@ -35,10 +36,12 @@ export function TripCard({ trip }: TripCardProps) {
       href={`/trips/${trip.id}`}
       className="group relative flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900/40 p-6 transition hover:border-slate-600 hover:bg-slate-900/70"
     >
-      <div className="pointer-events-none absolute right-6 top-6 flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-900/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand transition group-hover:border-brand group-hover:bg-slate-900">
-        <span>View trip</span>
-        <ChevronRight className="h-3.5 w-3.5" />
-      </div>
+      {showViewTripBadge ? (
+        <div className="pointer-events-none absolute right-6 top-6 flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-900/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand transition group-hover:border-brand group-hover:bg-slate-900">
+          <span>View trip</span>
+          <ChevronRight className="h-3.5 w-3.5" />
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-4 pr-16">
         <div>
           <h3 className="text-xl font-semibold text-white">{trip.name}</h3>

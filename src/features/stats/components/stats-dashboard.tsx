@@ -60,9 +60,11 @@ type TrendExpandedSections = Record<string, { trips?: boolean; tripDays?: boolea
 
 export function StatsDashboard({ stats }: StatsDashboardProps) {
   const [distributionType, setDistributionType] = useState<'hashtags' | 'tripTypes'>('tripTypes');
+  const [isDistributionExpanded, setIsDistributionExpanded] = useState(false);
   const [companionDistributionType, setCompanionDistributionType] = useState<'person' | 'group'>(
     'person'
   );
+  const [isCompanionExpanded, setIsCompanionExpanded] = useState(false);
   const [trendGrouping, setTrendGrouping] = useState<'year' | 'month'>('year');
   const [mostVisitedMetric, setMostVisitedMetric] = useState<'trips' | 'days'>('trips');
   const [mostVisitedIndices, setMostVisitedIndices] = useState<Record<'trips' | 'days', number>>({
@@ -182,10 +184,22 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
     ? tripTypeData
     : hashtagData;
   const maxDistributionValue = distributionData.reduce((max, item) => Math.max(max, item.value), 0) || 1;
+  const distributionPreviewLimit = 10;
+  const shouldShowDistributionToggle = distributionData.length > distributionPreviewLimit;
+  const visibleDistributionData =
+    shouldShowDistributionToggle && !isDistributionExpanded
+      ? distributionData.slice(0, distributionPreviewLimit)
+      : distributionData;
 
   const companionData: Array<CompanionPersonDistributionItem | CompanionGroupDistributionItem> =
     companionDistributionType === 'person' ? companionPersonData : companionGroupData;
   const maxCompanionValue = companionData.reduce((max, item) => Math.max(max, item.value), 0) || 1;
+  const companionPreviewLimit = 10;
+  const shouldShowCompanionToggle = companionData.length > companionPreviewLimit;
+  const visibleCompanionData =
+    shouldShowCompanionToggle && !isCompanionExpanded
+      ? companionData.slice(0, companionPreviewLimit)
+      : companionData;
   const hasMostVisited = mostVisitedTrips.length > 0 || mostVisitedDays.length > 0;
 
   const activeMostVisitedList =
@@ -316,7 +330,10 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
               type="button"
               variant={distributionType === 'tripTypes' ? 'primary' : 'secondary'}
               size="sm"
-              onClick={() => setDistributionType('tripTypes')}
+              onClick={() => {
+                setDistributionType('tripTypes');
+                setIsDistributionExpanded(false);
+              }}
             >
               Trip types
             </Button>
@@ -324,7 +341,10 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
               type="button"
               variant={distributionType === 'hashtags' ? 'primary' : 'secondary'}
               size="sm"
-              onClick={() => setDistributionType('hashtags')}
+              onClick={() => {
+                setDistributionType('hashtags');
+                setIsDistributionExpanded(false);
+              }}
             >
               Hashtags
             </Button>
@@ -336,7 +356,7 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
           </p>
         ) : (
           <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
-            {distributionData.map((item, index) => {
+            {visibleDistributionData.map((item, index) => {
               const color = chartColors[index % chartColors.length];
               const width = `${(item.value / maxDistributionValue) * 100}%`;
               const label =
@@ -417,6 +437,17 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
                 </div>
               );
             })}
+            {shouldShowDistributionToggle ? (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:bg-slate-900"
+                  onClick={() => setIsDistributionExpanded((prev) => !prev)}
+                >
+                  {isDistributionExpanded ? 'Show less' : 'See all'}
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </section>
@@ -429,7 +460,10 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
               type="button"
               variant={companionDistributionType === 'person' ? 'primary' : 'secondary'}
               size="sm"
-              onClick={() => setCompanionDistributionType('person')}
+              onClick={() => {
+                setCompanionDistributionType('person');
+                setIsCompanionExpanded(false);
+              }}
             >
               Person
             </Button>
@@ -437,7 +471,10 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
               type="button"
               variant={companionDistributionType === 'group' ? 'primary' : 'secondary'}
               size="sm"
-              onClick={() => setCompanionDistributionType('group')}
+              onClick={() => {
+                setCompanionDistributionType('group');
+                setIsCompanionExpanded(false);
+              }}
             >
               Group
             </Button>
@@ -449,7 +486,7 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
           </p>
         ) : (
           <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
-            {companionData.map((item, index) => {
+            {visibleCompanionData.map((item, index) => {
               const color = chartColors[index % chartColors.length];
               const width = `${(item.value / maxCompanionValue) * 100}%`;
               const label =
@@ -499,6 +536,17 @@ export function StatsDashboard({ stats }: StatsDashboardProps) {
                 </div>
               );
             })}
+            {shouldShowCompanionToggle ? (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:bg-slate-900"
+                  onClick={() => setIsCompanionExpanded((prev) => !prev)}
+                >
+                  {isCompanionExpanded ? 'Show less' : 'See all'}
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </section>

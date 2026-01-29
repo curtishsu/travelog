@@ -14,6 +14,14 @@ export type TripDaySummary = {
   trip_day_hashtags: TripDayHashtagSummary[];
 };
 
+export type TripCompanionGroupSummary = {
+  trip_group_id: string;
+};
+
+export type TripCompanionPersonSummary = {
+  person_id: string;
+};
+
 export type TripSummary = {
   id: string;
   name: string;
@@ -22,8 +30,11 @@ export type TripSummary = {
   status: TripStatus;
   created_at: string;
   updated_at: string;
+  trip_group_id?: string | null;
   trip_types: TripTypeSummary[];
   trip_days: TripDaySummary[];
+  trip_companion_groups?: TripCompanionGroupSummary[];
+  trip_companion_people?: TripCompanionPersonSummary[];
 };
 
 export type TripLink = Tables<'trip_links'>;

@@ -11,7 +11,8 @@ import {
   useUpdateTripGroup,
   useDeleteTripGroup,
   usePeople,
-  useUpdatePerson
+  useUpdatePerson,
+  useDeletePerson
 } from '@/features/trips/hooks';
 import type { Person, TripGroup } from '@/features/trips/types';
 import type { TripGroupInput } from '@/features/trips/api';
@@ -23,6 +24,7 @@ export function TripGroupsSettings() {
   const { mutateAsync: deleteTripGroupMutation } = useDeleteTripGroup();
   const { data: people, isLoading: isPeopleLoading, error: peopleError } = usePeople();
   const { mutateAsync: updatePersonMutation } = useUpdatePerson();
+  const { mutateAsync: deletePersonMutation } = useDeletePerson();
 
   const [settingsView, setSettingsView] = useState<'groups' | 'people'>('groups');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,6 +37,7 @@ export function TripGroupsSettings() {
   const [personLastName, setPersonLastName] = useState('');
   const [personGroupIds, setPersonGroupIds] = useState<string[]>([]);
   const [personModalError, setPersonModalError] = useState<string | null>(null);
+  const [isPersonDeleting, setIsPersonDeleting] = useState(false);
 
   function openCreateModal() {
     setModalMode('create');
@@ -126,6 +129,27 @@ export function TripGroupsSettings() {
       closePersonModal();
     } catch (error) {
       setPersonModalError(error instanceof Error ? error.message : 'Failed to save person.');
+    }
+  }
+
+  async function handlePersonDelete() {
+    if (!activePerson) return;
+
+    const fullName = [activePerson.first_name, activePerson.last_name].filter(Boolean).join(' ') || 'this person';
+    const confirmed = window.confirm(
+      `Delete ${fullName}?\n\nThis will remove them from all trip groups and any trips where they were selected. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setPersonModalError(null);
+    setIsPersonDeleting(true);
+    try {
+      await deletePersonMutation({ personId: activePerson.id });
+      setIsPersonDeleting(false);
+      closePersonModal();
+    } catch (error) {
+      setIsPersonDeleting(false);
+      setPersonModalError(error instanceof Error ? error.message : 'Failed to delete person.');
     }
   }
 
@@ -379,10 +403,19 @@ export function TripGroupsSettings() {
                 </div>
               </div>
               <div className="flex items-center justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="border border-red-500/40 text-red-300 hover:bg-red-500/10"
+                  onClick={() => void handlePersonDelete()}
+                  disabled={isPersonDeleting}
+                >
+                  {isPersonDeleting ? 'Deleting…' : 'Delete'}
+                </Button>
                 <Button type="button" variant="ghost" onClick={closePersonModal}>
                   Discard changes
                 </Button>
-                <Button type="button" onClick={() => void handlePersonSave()}>
+                <Button type="button" onClick={() => void handlePersonSave()} disabled={isPersonDeleting}>
                   Save
                 </Button>
               </div>

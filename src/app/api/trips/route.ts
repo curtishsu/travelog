@@ -31,7 +31,10 @@ export async function GET() {
         status,
         created_at,
         updated_at,
+        trip_group_id,
         trip_types(type),
+        trip_companion_groups(trip_group_id),
+        trip_companion_people(person_id),
         trip_days(
           id,
           day_index,

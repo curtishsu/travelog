@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-import { badRequest, notFound, ok, serverError, unauthorized } from '@/lib/http';
+import { badRequest, noContent, notFound, ok, serverError, unauthorized } from '@/lib/http';
 import { personUpdateSchema } from '@/lib/schemas/people';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 
@@ -84,5 +84,42 @@ export async function PATCH(request: NextRequest, context: { params: { personId:
     console.error('[PATCH /api/people/:id] failed', error);
     return serverError('Failed to update person.');
   }
+}
+
+export async function DELETE(_: NextRequest, context: { params: { personId: string } }) {
+  const { supabase, user } = await getSupabaseForRequest();
+
+  if (!user) {
+    return unauthorized();
+  }
+
+  const { data: existing, error: loadError } = await supabase
+    .from('people')
+    .select('id')
+    .eq('id', context.params.personId)
+    .eq('user_id', user.id)
+    .maybeSingle<{ id: string }>();
+
+  if (loadError) {
+    console.error('[DELETE /api/people/:id] failed to load person', loadError);
+    return serverError('Failed to delete person.');
+  }
+
+  if (!existing?.id) {
+    return notFound('Person not found.');
+  }
+
+  const { error: deleteError } = await supabase
+    .from('people')
+    .delete()
+    .eq('id', existing.id)
+    .eq('user_id', user.id);
+
+  if (deleteError) {
+    console.error('[DELETE /api/people/:id] failed', deleteError);
+    return serverError('Failed to delete person.');
+  }
+
+  return noContent();
 }
 
