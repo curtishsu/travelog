@@ -72,6 +72,8 @@ type ApiError = {
   issues?: unknown;
 };
 
+type ApiRequestError = Error & { issues?: unknown; status?: number };
+
 async function handleJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let body: ApiError | null = null;
@@ -81,8 +83,9 @@ async function handleJson<T>(response: Response): Promise<T> {
       // ignore parse errors
     }
     const message = body?.error ?? `Request failed with status ${response.status}`;
-    const error = new Error(message);
-    (error as Error & { issues?: unknown }).issues = body?.issues;
+    const error = new Error(message) as ApiRequestError;
+    error.issues = body?.issues;
+    error.status = response.status;
     throw error;
   }
 

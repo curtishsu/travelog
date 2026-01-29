@@ -50,7 +50,7 @@ function TripsListSkeleton() {
 }
 
 export function TripsList() {
-  const { data, isLoading, isError, refetch } = useTripsList();
+  const { data, isLoading, isError, error, refetch } = useTripsList();
   const { data: tripGroups } = useTripGroups();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterClauses, setFilterClauses] = useState<TripFilterClause[]>([]);
@@ -97,6 +97,24 @@ export function TripsList() {
   }
 
   if (isError) {
+    if ((error as Error & { status?: number } | null)?.status === 401) {
+      return (
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
+          <h3 className="text-2xl font-semibold text-white">Log in to see your trips</h3>
+          <p className="mt-3 text-sm text-slate-400">
+            Sign in (or create an account) to view your trips.
+          </p>
+          <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
+            <Button asChild>
+              <Link href="/auth/signin">Sign in</Link>
+            </Button>
+            <Button asChild variant="secondary">
+              <Link href="/auth/signup">Sign up</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="rounded-3xl border border-red-500/40 bg-red-500/10 p-8 text-center text-red-200">
         <p className="text-lg font-semibold">We couldn’t load your trips.</p>
