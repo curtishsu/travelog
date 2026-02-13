@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { badRequest, created, ok, serverError, unauthorized } from '@/lib/http';
 import { tripGroupCreateSchema } from '@/lib/schemas/trip-groups';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { RequestSupabaseClient } from '@/lib/supabase/context';
 import type { Database } from '@/types/database';
 
 type PersonRow = Database['public']['Tables']['people']['Row'];
@@ -25,7 +25,7 @@ function normalizeLastName(value: string | undefined | null) {
 }
 
 async function getOrCreatePersonId(
-  supabase: SupabaseClient<Database>,
+  supabase: RequestSupabaseClient,
   userId: string,
   firstName: string,
   lastName: string | null
@@ -81,7 +81,7 @@ async function getOrCreatePersonId(
 }
 
 async function fetchTripGroup(
-  supabase: SupabaseClient<Database>,
+  supabase: RequestSupabaseClient,
   groupId: string,
   userId: string
 ) {

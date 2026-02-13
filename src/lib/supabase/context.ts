@@ -1,11 +1,12 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import type { Database } from '@/types/database';
+
+type ServerSupabaseClient = ReturnType<typeof createSupabaseServerClient>;
+type ServiceSupabaseClient = ReturnType<typeof createSupabaseServiceClient>;
+export type RequestSupabaseClient = ServerSupabaseClient | ServiceSupabaseClient;
 
 type SupabaseWithAuth = {
-  supabase: SupabaseClient<Database>;
+  supabase: RequestSupabaseClient;
   user: { id: string } | null;
   isDemoMode: boolean;
   authError?: unknown;
@@ -17,7 +18,7 @@ function isAuthDisabled() {
   return process.env.AUTH_DISABLED === 'true';
 }
 
-async function ensureDemoUser(serviceClient: SupabaseClient<Database>) {
+async function ensureDemoUser(serviceClient: ServiceSupabaseClient) {
   if (cachedDemoUserId) {
     return cachedDemoUserId;
   }

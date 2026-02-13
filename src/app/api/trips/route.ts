@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getDateRange, getTripDuration, toISODate } from '@/lib/date';
 import { badRequest, created, ok, serverError, unauthorized } from '@/lib/http';
 import { tripCreateSchema } from '@/lib/schemas/trips';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { RequestSupabaseClient } from '@/lib/supabase/context';
 import type { Database } from '@/types/database';
 
 type TripDayInsert = Database['public']['Tables']['trip_days']['Insert'];
@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function detectTripOverlap(
-  supabase: SupabaseClient<Database>,
+  supabase: RequestSupabaseClient,
   userId: string,
   startDateISO: string,
   endDateISO: string,

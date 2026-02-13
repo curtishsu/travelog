@@ -2,8 +2,11 @@ import { redirect } from 'next/navigation';
 
 import { toISODate } from '@/lib/date';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { Tables } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
+
+type HomeTrip = Pick<Tables<'trips'>, 'id' | 'start_date' | 'end_date'>;
 
 export default async function HomePage() {
   const { supabase, user, isDemoMode } = await getSupabaseForRequest();
@@ -17,7 +20,8 @@ export default async function HomePage() {
     .from('trips')
     .select('id,start_date,end_date')
     .eq('user_id', userId)
-    .order('start_date', { ascending: false });
+    .order('start_date', { ascending: false })
+    .returns<HomeTrip[]>();
 
   if (error || !trips?.length) {
     redirect('/journal');

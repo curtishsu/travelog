@@ -1,11 +1,10 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { badRequest, ok, serverError, unauthorized } from '@/lib/http';
 import { env } from '@/lib/env';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
-import type { Database } from '@/types/database';
+import type { RequestSupabaseClient } from '@/lib/supabase/context';
 
 const updateGuestModeSchema = z.object({
   guestModeEnabled: z.boolean(),
@@ -13,7 +12,7 @@ const updateGuestModeSchema = z.object({
 });
 
 async function fetchGuestModeSetting(
-  supabase: SupabaseClient<Database>,
+  supabase: RequestSupabaseClient,
   userId: string
 ) {
   return supabase

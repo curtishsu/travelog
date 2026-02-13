@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getDateRange, getTripDuration, toISODate } from '@/lib/date';
 import { badRequest, noContent, notFound, ok, serverError, unauthorized } from '@/lib/http';
 import { tripUpdateSchema } from '@/lib/schemas/trips';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import type { RequestSupabaseClient } from '@/lib/supabase/context';
 import { deriveTripStatus } from '@/lib/trips/status';
 import { normalizeTripDetail } from '@/features/trips/privacy';
 import type { TripDetail } from '@/features/trips/types';
@@ -535,7 +535,7 @@ export async function DELETE(_: NextRequest, context: { params: { tripId: string
 }
 
 async function getTripWithRelations(
-  supabase: SupabaseClient<Database>,
+  supabase: RequestSupabaseClient,
   tripId: string,
   userId: string
 ) {
@@ -574,7 +574,7 @@ async function getTripWithRelations(
 }
 
 async function detectTripOverlap(
-  supabase: SupabaseClient<Database>,
+  supabase: RequestSupabaseClient,
   userId: string,
   startDateISO: string,
   endDateISO: string,

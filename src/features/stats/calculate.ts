@@ -1,6 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 import type { StatsSummary } from '@/features/stats/types';
+import type { RequestSupabaseClient } from '@/lib/supabase/context';
 import type { Database } from '@/types/database';
 
 type TripRow = Database['public']['Tables']['trips']['Row'];
@@ -31,7 +30,7 @@ function selectDominantBucket(counts: Map<string, number>, fallback: string) {
 }
 
 export async function calculateStats(
-  supabase: SupabaseClient<Database>,
+  supabase: RequestSupabaseClient,
   userId: string
 ): Promise<StatsSummary> {
   const todayISO = new Date().toISOString().slice(0, 10);
