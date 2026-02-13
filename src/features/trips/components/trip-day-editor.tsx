@@ -33,6 +33,11 @@ function areHashtagsEqual(a: string[], b: string[]) {
   return normalizedA.every((value, index) => value === normalizedB[index]);
 }
 
+function areStringArraysEqual(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
 function createSearchId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
@@ -72,6 +77,9 @@ export function TripDayEditor({
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [initialPhotoIds, setInitialPhotoIds] = useState<string[]>(
+    () => [...(day.photos ?? []).map((photo) => photo.id)].sort()
+  );
   const { data: suggestions } = useTripSuggestions();
   const [locationSearches, setLocationSearches] = useState<Array<{ id: string; query: string }>>([
     { id: createSearchId(), query: '' }
@@ -113,6 +121,7 @@ export function TripDayEditor({
     setFeedback(null);
     setIsDayLocked(day.is_locked ?? false);
     setLockError(null);
+    setInitialPhotoIds([...(day.photos ?? []).map((photo) => photo.id)].sort());
   }, [initialHighlight, initialJournal, initialHashtags, day.id, day.is_locked]);
 
   const locations = useMemo(() => {
@@ -406,12 +415,18 @@ export function TripDayEditor({
       .filter((tag) => tag.includes(draft) && !hashtags.includes(tag))
       .slice(0, 6);
   }, [suggestions?.hashtags, hashtagDraft, hashtags]);
+  const currentPhotoIds = useMemo(
+    () => [...(day.photos ?? []).map((photo) => photo.id)].sort(),
+    [day.photos]
+  );
+  const hasPhotoChanges = !areStringArraysEqual(currentPhotoIds, initialPhotoIds);
   const hasChanges =
     highlight !== initialHighlight ||
     journalEntry !== initialJournal ||
     !areHashtagsEqual(hashtags, initialHashtags) ||
     removedLocationIds.length > 0 ||
-    pendingLocationsToAdd.length > 0;
+    pendingLocationsToAdd.length > 0 ||
+    hasPhotoChanges;
   const effectiveIsLocked = isTripLocked || isDayLocked;
   const deferredHighlight = useDeferredValue(highlight);
   const deferredJournalEntry = useDeferredValue(journalEntry);
@@ -475,6 +490,7 @@ export function TripDayEditor({
       setHashtags(result.trip_day_hashtags.map((tag) => tag.hashtag));
       setRemovedLocationIds([]);
       setPendingLocationsToAdd([]);
+      setInitialPhotoIds(currentPhotoIds);
       setFeedback('Day saved.');
       setIsDayLocked(result.is_locked ?? isDayLocked);
 
@@ -493,6 +509,15 @@ export function TripDayEditor({
     if (!files?.length) {
       return;
     }
+
+    console.log(
+      '[photo upload] selected files',
+      Array.from(files).map((file) => ({
+        name: file.name,
+        type: file.type,
+        size: file.size
+      }))
+    );
 
     setPhotoError(null);
     setIsUploadingPhotos(true);
@@ -518,6 +543,12 @@ export function TripDayEditor({
       throw new Error('Photos must be 10 MB or smaller.');
     }
 
+    console.log('[photo upload] start', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('tripId', tripId);
@@ -526,6 +557,12 @@ export function TripDayEditor({
     const response = await fetch('/api/photos/upload', {
       method: 'POST',
       body: formData
+    });
+
+    console.log('[photo upload] response', {
+      ok: response.ok,
+      status: response.status,
+      contentType: response.headers.get('content-type')
     });
 
     if (!response.ok) {
@@ -947,11 +984,6 @@ export function TripDayEditor({
       {error ? <p className="text-sm text-red-300">{error.message}</p> : null}
       {feedback ? <p className="text-sm text-emerald-300">{feedback}</p> : null}
       <div className="flex flex-wrap justify-end gap-3">
-        {hasNextDay ? (
-          <Button type="button" variant="secondary" disabled={isPending} onClick={handleSave}>
-            {isPending ? 'Saving…' : 'Save & next'}
-          </Button>
-        ) : null}
         <Button type="button" disabled={isPending || !hasChanges} onClick={handleSave}>
           {isPending ? 'Saving…' : 'Save day'}
         </Button>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { TripOverviewForm, type TripOverviewFormValues } from '@/features/trips/components/trip-overview-form';
 import { TripDayEditor } from '@/features/trips/components/trip-day-editor';
 import { TripReflectionForm } from '@/features/trips/components/trip-reflection-form';
@@ -203,8 +204,15 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold text-white">{activeTrip.name}</h1>
-        <p className="text-sm text-slate-400">Manage trip details, daily notes, and privacy locks.</p>
+        <h1 className="text-2xl font-semibold text-white">
+          <Link
+            href={`/trips/${activeTrip.id}`}
+            className="underline-offset-4 transition hover:text-slate-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            title="View trip preview"
+          >
+            {activeTrip.name}
+          </Link>
+        </h1>
       </header>
       <nav className="overflow-x-auto">
         <div className="flex gap-2">

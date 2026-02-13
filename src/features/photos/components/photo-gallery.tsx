@@ -10,10 +10,12 @@ import type { TripPhoto } from '@/features/trips/types';
 type PhotoGalleryProps = {
   photos: TripPhoto[];
   onDelete?: (photo: TripPhoto) => void;
+  layout?: 'grid' | 'carousel';
 };
 
-export function PhotoGallery({ photos, onDelete }: PhotoGalleryProps) {
+export function PhotoGallery({ photos, onDelete, layout = 'grid' }: PhotoGalleryProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const isCarousel = layout === 'carousel';
 
   if (!photos.length) {
     return null;
@@ -42,22 +44,45 @@ export function PhotoGallery({ photos, onDelete }: PhotoGalleryProps) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div
+        className={
+          isCarousel
+            ? 'flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2'
+            : 'grid grid-cols-2 gap-3 sm:grid-cols-3'
+        }
+      >
         {photos.map((photo, index) => (
-          <button
-            type="button"
+          <div
             key={photo.id}
-            className="group relative aspect-square overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 transition hover:border-slate-600"
-            onClick={() => openLightbox(index)}
+            className={
+              isCarousel
+                ? 'group relative h-24 w-24 flex-none snap-start overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 transition hover:border-slate-600'
+                : 'group relative aspect-square overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 transition hover:border-slate-600'
+            }
           >
-            <Image
-              src={photo.thumbnail_url}
-              alt="Trip day photo"
-              fill
-              className="object-cover transition duration-300 group-hover:scale-105"
-              sizes="(min-width: 640px) 33vw, 50vw"
-            />
-          </button>
+            <button type="button" className="h-full w-full" onClick={() => openLightbox(index)}>
+              <Image
+                src={photo.thumbnail_url}
+                alt="Trip day photo"
+                fill
+                className="object-cover transition duration-300 group-hover:scale-105"
+                sizes={isCarousel ? '96px' : '(min-width: 640px) 33vw, 50vw'}
+              />
+            </button>
+            {onDelete ? (
+              <button
+                type="button"
+                className="absolute right-0 top-0 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-slate-600 bg-slate-900/90 text-slate-200 shadow-sm transition hover:border-slate-400 hover:text-white"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(photo);
+                }}
+                aria-label="Delete photo"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         ))}
       </div>
       {isLightboxOpen && activePhoto ? (

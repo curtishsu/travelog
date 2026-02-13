@@ -20,6 +20,15 @@ export async function POST(request: NextRequest) {
     const tripDayId = formData.get('tripDayId');
     const tripLocationId = formData.get('tripLocationId');
 
+    console.log('[POST /api/photos/upload] incoming', {
+      hasFile: file instanceof File,
+      fileType: file instanceof File ? file.type : null,
+      fileSize: file instanceof File ? file.size : null,
+      tripId,
+      tripDayId,
+      tripLocationId
+    });
+
     if (!(file instanceof File)) {
       return badRequest('Photo file is required.');
     }
@@ -141,7 +150,11 @@ export async function POST(request: NextRequest) {
 
     return created({ photo: typedPhoto });
   } catch (error) {
-    console.error('[POST /api/photos/upload] failed', error);
+    console.error('[POST /api/photos/upload] failed', {
+      message: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : null,
+      stack: error instanceof Error ? error.stack : null
+    });
     return serverError('Failed to process photo upload.');
   }
 }

@@ -29,3 +29,5 @@ A. A trip is attributed to the year or month that a majority of the days are in.
 
 For the travel days per year metric
 A. The travel day is attributed to the day that it occurs. When listing out the trips in a given month or year, include all trips that occurred in that time frame
+
+Do not feel a need to backfill any 

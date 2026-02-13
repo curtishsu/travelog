@@ -64,6 +64,12 @@ export function TripDaySection({ day, guestModeEnabled, isTripLocked }: TripDayS
       </header>
       {hasContent ? (
         <div className="space-y-4 text-sm leading-relaxed text-slate-300">
+          {!isDayMasked && day.photos?.length ? (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-white">Photos</p>
+              <PhotoGallery photos={day.photos} layout="carousel" />
+            </div>
+          ) : null}
           {renderLocations(day)}
           {!isDayMasked && hasHighlight ? (
             <div>
@@ -78,12 +84,6 @@ export function TripDaySection({ day, guestModeEnabled, isTripLocked }: TripDayS
             </div>
           ) : null}
           {renderHashtags(day)}
-          {!isDayMasked && day.photos?.length ? (
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-white">Photos</p>
-              <PhotoGallery photos={day.photos} />
-            </div>
-          ) : null}
         </div>
       ) : (
         <p className="text-sm text-slate-500">Nothing recorded for this day yet.</p>
