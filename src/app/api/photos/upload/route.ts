@@ -13,8 +13,12 @@ type PhotoRow = Database['public']['Tables']['photos']['Row'];
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const requestStart = Date.now();
+  const timings: Record<string, number> = {};
   try {
+    const parseFormDataStart = Date.now();
     const formData = await request.formData();
+    timings.parseFormDataMs = Date.now() - parseFormDataStart;
     const file = formData.get('file');
     const tripId = formData.get('tripId');
     const tripDayId = formData.get('tripDayId');
@@ -79,44 +83,55 @@ export async function POST(request: NextRequest) {
       return badRequest('Photo trip reference mismatch.');
     }
 
+    const readInputBufferStart = Date.now();
     const arrayBuffer = await file.arrayBuffer();
     const inputBuffer = Buffer.from(arrayBuffer);
+    timings.readInputBufferMs = Date.now() - readInputBufferStart;
 
+    const imageProcessingStart = Date.now();
     const processor = sharp(inputBuffer, { failOn: 'none' }).rotate();
-    const metadata = await processor.metadata();
+    const fullProcessor = processor
+      .clone()
+      .resize(2560, 2560, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 });
+    const thumbnailProcessor = processor
+      .clone()
+      .resize(400, 400, { fit: 'cover', position: 'centre', withoutEnlargement: true })
+      .jpeg({ quality: 75 });
 
-    const [fullBuffer, thumbnailBuffer] = await Promise.all([
-      processor.clone().jpeg({ quality: 90 }).toBuffer(),
-      processor
-        .clone()
-        .resize(400, 400, { fit: 'cover', position: 'centre' })
-        .jpeg({ quality: 80 })
-        .toBuffer()
+    const [{ data: fullBuffer, info: fullInfo }, thumbnailBuffer] = await Promise.all([
+      fullProcessor.toBuffer({ resolveWithObject: true }),
+      thumbnailProcessor.toBuffer()
     ]);
+    timings.imageProcessingMs = Date.now() - imageProcessingStart;
 
-    const width = metadata.width ?? null;
-    const height = metadata.height ?? null;
+    const width = fullInfo.width ?? null;
+    const height = fullInfo.height ?? null;
 
     const photoId = randomUUID();
     const basePath = `${user.id}/${tripId}/${tripDayId}`;
     const fullPath = `${basePath}/full/${photoId}.jpg`;
     const thumbnailPath = `${basePath}/thumb/${photoId}.jpg`;
 
+    const fullUploadStart = Date.now();
     const fullUpload = await supabase.storage.from('photos').upload(fullPath, fullBuffer, {
       cacheControl: '3600',
       contentType: 'image/jpeg',
       upsert: false
     });
+    timings.fullUploadMs = Date.now() - fullUploadStart;
 
     if (fullUpload.error) {
       throw fullUpload.error;
     }
 
+    const thumbnailUploadStart = Date.now();
     const thumbUpload = await supabase.storage.from('photos').upload(thumbnailPath, thumbnailBuffer, {
       cacheControl: '3600',
       contentType: 'image/jpeg',
       upsert: false
     });
+    timings.thumbnailUploadMs = Date.now() - thumbnailUploadStart;
 
     if (thumbUpload.error) {
       throw thumbUpload.error;
@@ -128,6 +143,7 @@ export async function POST(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const photosTable = supabase.from('photos') as any;
 
+    const insertPhotoStart = Date.now();
     const { data: photo, error: insertError } = await photosTable
       .insert({
         trip_id: tripId,
@@ -141,6 +157,7 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
+    timings.insertPhotoRecordMs = Date.now() - insertPhotoStart;
 
     const typedPhoto = photo as PhotoRow | null;
 
@@ -148,12 +165,26 @@ export async function POST(request: NextRequest) {
       throw insertError ?? new Error('Failed to save photo metadata.');
     }
 
+    timings.totalMs = Date.now() - requestStart;
+    console.log('[POST /api/photos/upload] success', {
+      tripId,
+      tripDayId,
+      photoId,
+      fileType: file.type,
+      fileSize: file.size,
+      timings
+    });
+
     return created({ photo: typedPhoto });
   } catch (error) {
     console.error('[POST /api/photos/upload] failed', {
       message: error instanceof Error ? error.message : String(error),
       name: error instanceof Error ? error.name : null,
-      stack: error instanceof Error ? error.stack : null
+      stack: error instanceof Error ? error.stack : null,
+      timings: {
+        ...timings,
+        totalMs: Date.now() - requestStart
+      }
     });
     return serverError('Failed to process photo upload.');
   }

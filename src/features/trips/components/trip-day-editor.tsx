@@ -523,9 +523,7 @@ export function TripDayEditor({
     setIsUploadingPhotos(true);
 
     try {
-      for (const file of Array.from(files)) {
-        await uploadSinglePhoto(file);
-      }
+      await uploadFilesWithConcurrency(Array.from(files), 3);
     } catch (uploadError) {
       console.error(uploadError);
       setPhotoError(uploadError instanceof Error ? uploadError.message : 'Failed to upload photo.');
@@ -535,6 +533,21 @@ export function TripDayEditor({
         fileInputRef.current.value = '';
       }
     }
+  }
+
+  async function uploadFilesWithConcurrency(files: File[], concurrencyLimit: number) {
+    let cursor = 0;
+    const workerCount = Math.min(concurrencyLimit, files.length);
+
+    async function worker() {
+      while (cursor < files.length) {
+        const index = cursor;
+        cursor += 1;
+        await uploadSinglePhoto(files[index]);
+      }
+    }
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
   }
 
   async function uploadSinglePhoto(file: File) {
