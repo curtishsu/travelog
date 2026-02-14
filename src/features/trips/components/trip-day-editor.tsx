@@ -987,7 +987,7 @@ export function TripDayEditor({
           {isUploadingPhotos ? <p className="text-xs text-slate-400">Uploading photos…</p> : null}
           {photoError ? <p className="text-xs text-red-300">{photoError}</p> : null}
           {day.photos?.length ? (
-            <PhotoGallery photos={day.photos} onDelete={handleDeletePhoto} />
+            <PhotoGallery photos={day.photos} onDelete={handleDeletePhoto} layout="carousel" />
           ) : (
             <p className="text-sm text-slate-500">No photos added yet.</p>
           )}

@@ -127,6 +127,20 @@ export async function calculateStats(
 
   const tripDayMap = new Map(tripDays.map((day) => [day.id, day]));
   const tripMap = new Map(trips.map((trip) => [trip.id, trip]));
+  const compareTripIdsByReverseChronological = (tripIdA: string, tripIdB: string) => {
+    const tripA = tripMap.get(tripIdA);
+    const tripB = tripMap.get(tripIdB);
+    const startDateA = tripA?.start_date ?? '';
+    const startDateB = tripB?.start_date ?? '';
+
+    if (startDateA !== startDateB) {
+      return startDateB.localeCompare(startDateA);
+    }
+
+    const nameA = (tripA?.name ?? 'Untitled trip').toLowerCase();
+    const nameB = (tripB?.name ?? 'Untitled trip').toLowerCase();
+    return nameA.localeCompare(nameB);
+  };
 
   const companionGroupsByTrip = new Map<string, Set<string>>();
   for (const row of tripCompanionGroups) {
@@ -569,14 +583,14 @@ export async function calculateStats(
     tripTypeDistribution: Array.from(tripTypeDistributionMap.entries())
       .map(([type, tripSet]) => {
         const tripsForType = Array.from(tripSet)
+          .sort(compareTripIdsByReverseChronological)
           .map((tripId) => {
             const trip = tripMap.get(tripId);
             return {
               tripId,
               tripName: trip?.name ?? 'Untitled trip'
             };
-          })
-          .sort((a, b) => a.tripName.localeCompare(b.tripName));
+          });
         return {
           type,
           tripCount: tripSet.size,
@@ -593,7 +607,7 @@ export async function calculateStats(
       .map(([personId, detail]) => {
         const person = peopleById.get(personId);
         const tripsForPerson = Array.from(detail.trips.values()).sort((a, b) =>
-          a.tripName.localeCompare(b.tripName)
+          compareTripIdsByReverseChronological(a.tripId, b.tripId)
         );
         return {
           personId,
@@ -615,7 +629,7 @@ export async function calculateStats(
       .map(([groupId, detail]) => {
         const groupName = groupNameByGroup.get(groupId) ?? 'Unknown group';
         const tripsForGroup = Array.from(detail.trips.values()).sort((a, b) =>
-          a.tripName.localeCompare(b.tripName)
+          compareTripIdsByReverseChronological(a.tripId, b.tripId)
         );
         return {
           groupId,
@@ -634,14 +648,14 @@ export async function calculateStats(
       .sort(([bucketA], [bucketB]) => Number(bucketA) - Number(bucketB))
       .map(([bucket, tripIds]) => {
         const tripsForBucket = Array.from(tripIds)
+          .sort(compareTripIdsByReverseChronological)
           .map((tripId) => {
             const trip = tripMap.get(tripId);
             return {
               tripId,
               tripName: trip?.name ?? 'Untitled trip'
             };
-          })
-          .sort((a, b) => a.tripName.localeCompare(b.tripName));
+          });
         return {
           bucket,
           tripCount: tripIds.size,
@@ -652,14 +666,14 @@ export async function calculateStats(
       .sort(([bucketA], [bucketB]) => bucketA.localeCompare(bucketB))
       .map(([bucket, tripIds]) => {
         const tripsForBucket = Array.from(tripIds)
+          .sort(compareTripIdsByReverseChronological)
           .map((tripId) => {
             const trip = tripMap.get(tripId);
             return {
               tripId,
               tripName: trip?.name ?? 'Untitled trip'
             };
-          })
-          .sort((a, b) => a.tripName.localeCompare(b.tripName));
+          });
         return {
           bucket,
           tripCount: tripIds.size,
@@ -673,14 +687,14 @@ export async function calculateStats(
           .slice()
           .sort((a, b) => (a.date === b.date ? a.tripName.localeCompare(b.tripName) : a.date.localeCompare(b.date)));
         const tripsForBucket = Array.from(detail.tripIds)
+          .sort(compareTripIdsByReverseChronological)
           .map((tripId) => {
             const trip = tripMap.get(tripId);
             return {
               tripId,
               tripName: trip?.name ?? 'Untitled trip'
             };
-          })
-          .sort((a, b) => a.tripName.localeCompare(b.tripName));
+          });
         return {
           bucket,
           dayCount: tripDays.length,
@@ -695,14 +709,14 @@ export async function calculateStats(
           .slice()
           .sort((a, b) => (a.date === b.date ? a.tripName.localeCompare(b.tripName) : a.date.localeCompare(b.date)));
         const tripsForBucket = Array.from(detail.tripIds)
+          .sort(compareTripIdsByReverseChronological)
           .map((tripId) => {
             const trip = tripMap.get(tripId);
             return {
               tripId,
               tripName: trip?.name ?? 'Untitled trip'
             };
-          })
-          .sort((a, b) => a.tripName.localeCompare(b.tripName));
+          });
         return {
           bucket,
           dayCount: tripDays.length,
