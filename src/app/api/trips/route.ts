@@ -38,6 +38,7 @@ export async function GET() {
         trip_days(
           id,
           day_index,
+          is_favorite,
           trip_day_hashtags(
             hashtag
           )

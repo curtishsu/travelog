@@ -40,6 +40,7 @@ export type LocationInput = {
 export type TripDayUpdatePayload = {
   highlight?: string | null;
   journalEntry?: string | null;
+  isFavorite?: boolean;
   hashtags?: string[];
   locationsToAdd?: LocationInput[];
   locationIdsToRemove?: string[];

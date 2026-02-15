@@ -153,6 +153,12 @@ export type MapLocationEntry = {
   date: string;
   highlight: string | null;
   hashtags: string[];
+  dayIsFavorite: boolean;
+  dayPhotos: Array<{
+    id: string;
+    thumbnailUrl: string;
+    fullUrl: string;
+  }>;
 };
 
 export async function loadMapLocations(filters?: {
@@ -252,9 +258,11 @@ export async function loadMapLocations(filters?: {
           id,
           date,
           day_index,
+          is_favorite,
           highlight,
           trip_locations(*),
-          trip_day_hashtags(hashtag)
+          trip_day_hashtags(hashtag),
+          photos(id,thumbnail_url,full_url)
         )
       `
     )
@@ -281,6 +289,9 @@ export async function loadMapLocations(filters?: {
         Database['public']['Tables']['trip_days']['Row'] & {
           trip_locations: Database['public']['Tables']['trip_locations']['Row'][];
           trip_day_hashtags: Database['public']['Tables']['trip_day_hashtags']['Row'][];
+          photos: Array<
+            Pick<Database['public']['Tables']['photos']['Row'], 'id' | 'thumbnail_url' | 'full_url'>
+          >;
         }
       >;
     }
@@ -323,6 +334,11 @@ export async function loadMapLocations(filters?: {
 
     for (const tripDay of trip.trip_days ?? []) {
       const hashtags = (tripDay.trip_day_hashtags ?? []).map((tag) => tag.hashtag);
+      const dayPhotos = (tripDay.photos ?? []).map((photo) => ({
+        id: photo.id,
+        thumbnailUrl: photo.thumbnail_url,
+        fullUrl: photo.full_url
+      }));
       for (const location of tripDay.trip_locations ?? []) {
         entries.push({
           locationId: location.id,
@@ -343,7 +359,9 @@ export async function loadMapLocations(filters?: {
           dayIndex: tripDay.day_index,
           date: tripDay.date,
           highlight: tripDay.highlight,
-          hashtags
+          hashtags,
+          dayIsFavorite: Boolean((tripDay as unknown as { is_favorite?: boolean | null }).is_favorite),
+          dayPhotos
         });
       }
     }

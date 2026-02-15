@@ -1,4 +1,4 @@
-export type TripFilterKind = 'dateRange' | 'tripType' | 'tripGroup' | 'tripPeople';
+export type TripFilterKind = 'dateRange' | 'tripType' | 'tripGroup' | 'tripPeople' | 'favorites';
 
 export type TripFilterClause =
   | {
@@ -21,6 +21,10 @@ export type TripFilterClause =
       id: string;
       kind: 'tripPeople';
       personIds: string[];
+    }
+  | {
+      id: string;
+      kind: 'favorites';
     };
 
 export type TripFilterTripMeta = {
@@ -30,6 +34,7 @@ export type TripFilterTripMeta = {
   tripTypes: string[];
   companionGroupIds: string[];
   companionPersonIds: string[];
+  hasFavoriteDay: boolean;
 };
 
 export type TripGroupMembersIndex = Map<string, string[]>;
@@ -103,6 +108,10 @@ function tripMatchesClause(
       members.forEach((id) => derivedPeople.add(id));
     }
     return clause.personIds.some((id) => derivedPeople.has(id));
+  }
+
+  if (clause.kind === 'favorites') {
+    return Boolean(trip.hasFavoriteDay);
   }
 
   return true;

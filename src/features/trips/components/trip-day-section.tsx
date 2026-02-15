@@ -4,6 +4,7 @@ import { PhotoGallery } from '@/features/photos/components/photo-gallery';
 import type { TripDayWithRelations } from '@/features/trips/types';
 import { formatDateForDisplay } from '@/lib/date';
 import { MinimalMarkdown } from '@/components/ui/minimal-markdown';
+import { TripDayFavoriteButton } from '@/features/trips/components/trip-day-favorite-button';
 
 type TripDaySectionProps = {
   day: TripDayWithRelations;
@@ -53,14 +54,24 @@ export function TripDaySection({ day, guestModeEnabled, isTripLocked }: TripDayS
     (day.trip_day_hashtags?.length ?? 0) > 0 ||
     (day.photos?.length ?? 0) > 0;
   const isDayMasked = guestModeEnabled && (isTripLocked || (day.is_locked ?? false));
+  const favoriteDisabled = guestModeEnabled || isTripLocked || (day.is_locked ?? false);
+  const isFavorite = Boolean((day as unknown as { is_favorite?: boolean | null }).is_favorite);
 
   return (
     <section id={`day-${day.day_index}`} className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/40 p-6">
-      <header className="space-y-1">
-        <h2 className="text-lg font-semibold text-white">
-          Day {day.day_index}{' '}
-          <span className="text-sm font-normal text-slate-400">• {formatDateForDisplay(day.date)}</span>
-        </h2>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-white">
+            Day {day.day_index}{' '}
+            <span className="text-sm font-normal text-slate-400">• {formatDateForDisplay(day.date)}</span>
+          </h2>
+        </div>
+        <TripDayFavoriteButton
+          tripId={day.trip_id}
+          dayIndex={day.day_index}
+          isFavorite={isFavorite}
+          disabled={favoriteDisabled}
+        />
       </header>
       {hasContent ? (
         <div className="space-y-4 text-sm leading-relaxed text-slate-300">

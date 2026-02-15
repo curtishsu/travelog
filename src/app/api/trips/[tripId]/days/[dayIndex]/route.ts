@@ -83,6 +83,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     updates.is_locked = parseResult.data.isLocked;
   }
 
+  if (parseResult.data.isFavorite !== undefined) {
+    updates.is_favorite = parseResult.data.isFavorite;
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tripDaysTable = supabase.from('trip_days') as any;

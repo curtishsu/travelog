@@ -16,6 +16,7 @@ import {
 import type { TripDayWithRelations, TripPhoto, TripDetail } from '@/features/trips/types';
 import { formatDateForDisplay } from '@/lib/date';
 import { PhotoGallery } from '@/features/photos/components/photo-gallery';
+import { TripDayFavoriteButton } from '@/features/trips/components/trip-day-favorite-button';
 
 type TripDayEditorProps = {
   tripId: string;
@@ -625,33 +626,46 @@ export function TripDayEditor({
     ? 'Unlock this day'
     : 'Lock this day';
 
+  const isFavorite = Boolean((day as unknown as { is_favorite?: boolean | null }).is_favorite);
+
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-xl font-semibold text-white">
-            Day {day.day_index}{' '}
-            <span className="text-sm font-normal text-slate-400">• {formatDateForDisplay(day.date)}</span>
-          </h2>
-          {isTripLocked ? (
-            <p className="text-xs text-slate-400">
-              Trip content is globally locked. Unlock the trip to adjust day-level privacy.
-            </p>
-          ) : null}
+      <header className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold text-white">
+              Day {day.day_index}{' '}
+              <span className="text-sm font-normal text-slate-400">• {formatDateForDisplay(day.date)}</span>
+            </h2>
+          </div>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <TripDayFavoriteButton
+              tripId={tripId}
+              dayIndex={day.day_index}
+              isFavorite={isFavorite}
+              disabled={effectiveIsLocked}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="flex items-center gap-2"
+              onClick={handleToggleDayLock}
+              disabled={lockButtonDisabled}
+              aria-label={lockButtonLabel}
+              title={lockButtonTitle}
+            >
+              {effectiveIsLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+              {lockButtonLabel}
+            </Button>
+          </div>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="flex items-center gap-2"
-          onClick={handleToggleDayLock}
-          disabled={lockButtonDisabled}
-          aria-label={lockButtonLabel}
-          title={lockButtonTitle}
-        >
-          {effectiveIsLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-          {lockButtonLabel}
-        </Button>
+
+        {isTripLocked ? (
+          <p className="text-xs text-slate-400">
+            Trip content is globally locked. Unlock the trip to adjust day-level privacy.
+          </p>
+        ) : null}
       </header>
       {lockError ? <p className="text-sm text-red-300">{lockError}</p> : null}
       <section className="space-y-4">

@@ -27,6 +27,9 @@ function isClauseActive(clause: TripFilterClause) {
   if (clause.kind === 'tripPeople') {
     return clause.personIds.length > 0;
   }
+  if (clause.kind === 'favorites') {
+    return true;
+  }
   return false;
 }
 
@@ -77,7 +80,8 @@ export function TripsList() {
         endDate: trip.end_date,
         tripTypes: (trip.trip_types ?? []).map((row) => row.type),
         companionGroupIds,
-        companionPersonIds: trip.trip_companion_people?.map((row) => row.person_id) ?? []
+        companionPersonIds: trip.trip_companion_people?.map((row) => row.person_id) ?? [],
+        hasFavoriteDay: (trip.trip_days ?? []).some((day) => Boolean(day.is_favorite))
       };
     });
   }, [data]);

@@ -14,6 +14,7 @@ type TripFiltersDialogProps = {
   onClose: () => void;
   onApply: () => void;
   title?: string;
+  exclusiveKinds?: TripFilterKind[];
 };
 
 function createId() {
@@ -37,7 +38,8 @@ export function TripFiltersDialog({
   onChange,
   onClose,
   onApply,
-  title = 'Filter trips'
+  title = 'Filter trips',
+  exclusiveKinds = []
 }: TripFiltersDialogProps) {
   const { data: suggestions } = useTripSuggestions();
   const { data: tripGroups } = useTripGroups();
@@ -61,10 +63,19 @@ export function TripFiltersDialog({
   }, [people]);
 
   const safeClauses = useMemo(() => clampClauses(clauses ?? []), [clauses]);
+  const exclusiveKindSet = useMemo(() => new Set<TripFilterKind>(exclusiveKinds), [exclusiveKinds]);
+  const hasExclusiveClause = useMemo(
+    () => safeClauses.some((clause) => exclusiveKindSet.has(clause.kind)),
+    [safeClauses, exclusiveKindSet]
+  );
 
   if (!open) return null;
 
   function updateClause(id: string, next: TripFilterClause) {
+    if (exclusiveKindSet.has(next.kind)) {
+      onChange([next]);
+      return;
+    }
     onChange(safeClauses.map((clause) => (clause.id === id ? next : clause)));
   }
 
@@ -74,6 +85,9 @@ export function TripFiltersDialog({
   }
 
   function addClause() {
+    if (hasExclusiveClause) {
+      return;
+    }
     onChange([...safeClauses, createEmptyClause()]);
   }
 
@@ -84,7 +98,8 @@ export function TripFiltersDialog({
           <div className="space-y-1">
             <h3 className="text-lg font-semibold text-white">{title}</h3>
             <p className="text-sm text-slate-400">
-              Add clauses to narrow results. Clauses combine with <span className="font-semibold text-slate-200">AND</span>.
+              Add clauses to narrow results. Clauses combine with <span className="font-semibold text-slate-200">AND</span>
+              {hasExclusiveClause ? <span className="text-slate-400"> (some filters are exclusive)</span> : null}.
             </p>
           </div>
           <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close filters">
@@ -123,6 +138,8 @@ export function TripFiltersDialog({
                         updateClause(clause.id, { id: clause.id, kind, tripTypes: [] });
                       } else if (kind === 'tripGroup') {
                         updateClause(clause.id, { id: clause.id, kind, tripGroupIds: [] });
+                      } else if (kind === 'favorites') {
+                        updateClause(clause.id, { id: clause.id, kind });
                       } else {
                         updateClause(clause.id, { id: clause.id, kind, personIds: [] });
                       }
@@ -133,6 +150,7 @@ export function TripFiltersDialog({
                     <option value="tripType">Trip Type</option>
                     <option value="tripGroup">Trip Group</option>
                     <option value="tripPeople">Trip People</option>
+                    <option value="favorites">Favorites</option>
                   </select>
                 </div>
 
@@ -187,13 +205,17 @@ export function TripFiltersDialog({
                     onChange={(next) => updateClause(clause.id, { ...clause, personIds: next })}
                   />
                 ) : null}
+
+                {clause.kind === 'favorites' ? (
+                  <p className="text-sm text-slate-300">Only show trips that include at least one favorited day.</p>
+                ) : null}
               </div>
             </div>
           ))}
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="secondary" onClick={addClause}>
+          <Button type="button" variant="secondary" onClick={addClause} disabled={hasExclusiveClause}>
             + Filter
           </Button>
           <div className="flex items-center gap-3">

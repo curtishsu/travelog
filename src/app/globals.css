@@ -19,3 +19,17 @@ a {
   @apply text-brand underline-offset-4 hover:underline;
 }
 
+@media (max-width: 767px) {
+  .timeline-mapbox-shell .mapboxgl-ctrl-bottom-left {
+    bottom: auto;
+    left: 10px;
+    top: 10px;
+  }
+
+  .timeline-mapbox-shell .mapboxgl-ctrl-bottom-right {
+    bottom: auto;
+    right: 10px;
+    top: 10px;
+  }
+}
+

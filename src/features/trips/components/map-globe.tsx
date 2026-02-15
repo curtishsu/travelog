@@ -6,6 +6,7 @@ import mapboxgl from 'mapbox-gl';
 import type { Geometry, GeometryCollection } from 'geojson';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Globe2, SlidersHorizontal, X } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
 import type { MapLocationEntry } from '@/features/trips/server';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<GroupingMode>('city');
   const [groupBy, setGroupBy] = useState<GroupByMode>('none');
   const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
@@ -91,15 +93,20 @@ export function MapGlobe({ locations }: MapGlobeProps) {
   const tripMetas = useMemo(() => {
     const map = new Map<string, TripFilterTripMeta>();
     for (const entry of locations) {
-      if (!map.has(entry.tripId)) {
+      const prev = map.get(entry.tripId);
+      const hasFavoriteDay = Boolean(entry.dayIsFavorite) || Boolean(prev?.hasFavoriteDay);
+      if (!prev) {
         map.set(entry.tripId, {
           tripId: entry.tripId,
           startDate: entry.tripStartDate,
           endDate: entry.tripEndDate,
           tripTypes: entry.tripTypes ?? [],
           companionGroupIds: entry.companionGroupIds ?? [],
-          companionPersonIds: entry.companionPersonIds ?? []
+          companionPersonIds: entry.companionPersonIds ?? [],
+          hasFavoriteDay
         });
+      } else if (prev.hasFavoriteDay !== hasFavoriteDay) {
+        map.set(entry.tripId, { ...prev, hasFavoriteDay });
       }
     }
     return Array.from(map.values());
@@ -110,9 +117,17 @@ export function MapGlobe({ locations }: MapGlobeProps) {
     [tripMetas, filterClauses, groupMembersIndex]
   );
 
+  const hasFavoritesFilter = useMemo(
+    () => (filterClauses ?? []).some((clause) => clause.kind === 'favorites'),
+    [filterClauses]
+  );
+
   const visibleLocations = useMemo(
-    () => locations.filter((entry) => allowedTripIds.has(entry.tripId)),
-    [locations, allowedTripIds]
+    () =>
+      locations.filter(
+        (entry) => allowedTripIds.has(entry.tripId) && (!hasFavoritesFilter || Boolean(entry.dayIsFavorite))
+      ),
+    [locations, allowedTripIds, hasFavoritesFilter]
   );
 
   const groups = useMemo(() => groupLocations(visibleLocations, mode), [visibleLocations, mode]);
@@ -132,6 +147,11 @@ export function MapGlobe({ locations }: MapGlobeProps) {
   const goToNextEntry = () => {
     setActiveEntryIndex((prev) => Math.min(prev + 1, Math.max(totalEntries - 1, 0)));
   };
+
+  const timelineHref = useMemo(() => {
+    const query = searchParams.toString();
+    return query ? `/timeline?${query}` : '/timeline';
+  }, [searchParams]);
 
   useEffect(() => {
     if (focusedGroupId && !groups.some((group) => group.id === focusedGroupId)) {
@@ -448,79 +468,84 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-3xl font-semibold text-white">Globe</h1>
-          <div className="relative">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setControlsMenuOpen((prev) => !prev)}
-            >
-              <SlidersHorizontal className="mr-2 h-4 w-4" />
-              Controls
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" asChild>
+              <a href={timelineHref}>Show Timeline</a>
             </Button>
-            {controlsMenuOpen ? (
-              <div className="absolute right-0 top-10 z-40 w-56 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-xl">
-                <button
-                  type="button"
-                  className="w-full px-4 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800"
-                  onClick={() => {
-                    setDraftFilterClauses(filterClauses);
-                    setFiltersOpen(true);
-                    setControlsMenuOpen(false);
-                  }}
-                >
-                  Filter…
-                </button>
-                <div className="border-t border-slate-800 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Group by
+            <div className="relative">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setControlsMenuOpen((prev) => !prev)}
+              >
+                <SlidersHorizontal className="mr-2 h-4 w-4" />
+                Controls
+              </Button>
+              {controlsMenuOpen ? (
+                <div className="absolute right-0 top-10 z-40 w-56 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-xl">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      setDraftFilterClauses(filterClauses);
+                      setFiltersOpen(true);
+                      setControlsMenuOpen(false);
+                    }}
+                  >
+                    Filter…
+                  </button>
+                  <div className="border-t border-slate-800 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Group by
+                  </div>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      setGroupBy('year');
+                      setControlsMenuOpen(false);
+                    }}
+                  >
+                    <span>Year</span>
+                    {groupBy === 'year' ? <span className="text-xs text-brand">Active</span> : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      setGroupBy('tripType');
+                      setControlsMenuOpen(false);
+                    }}
+                  >
+                    <span>Trip Type</span>
+                    {groupBy === 'tripType' ? <span className="text-xs text-brand">Active</span> : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-left text-sm text-slate-400 hover:bg-slate-800"
+                    onClick={() => {
+                      setGroupBy('none');
+                      setControlsMenuOpen(false);
+                    }}
+                  >
+                    Clear group by
+                  </button>
+                  <div className="border-t border-slate-800" />
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800"
+                    onClick={() => {
+                      setGroupBy('none');
+                      setFilterClauses([]);
+                      setDraftFilterClauses([]);
+                      setControlsMenuOpen(false);
+                    }}
+                  >
+                    Clear all
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-800"
-                  onClick={() => {
-                    setGroupBy('year');
-                    setControlsMenuOpen(false);
-                  }}
-                >
-                  <span>Year</span>
-                  {groupBy === 'year' ? <span className="text-xs text-brand">Active</span> : null}
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-800"
-                  onClick={() => {
-                    setGroupBy('tripType');
-                    setControlsMenuOpen(false);
-                  }}
-                >
-                  <span>Trip Type</span>
-                  {groupBy === 'tripType' ? <span className="text-xs text-brand">Active</span> : null}
-                </button>
-                <button
-                  type="button"
-                  className="w-full px-4 py-3 text-left text-sm text-slate-400 hover:bg-slate-800"
-                  onClick={() => {
-                    setGroupBy('none');
-                    setControlsMenuOpen(false);
-                  }}
-                >
-                  Clear group by
-                </button>
-                <div className="border-t border-slate-800" />
-                <button
-                  type="button"
-                  className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800"
-                  onClick={() => {
-                    setGroupBy('none');
-                    setFilterClauses([]);
-                    setDraftFilterClauses([]);
-                    setControlsMenuOpen(false);
-                  }}
-                >
-                  Clear all
-                </button>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
         {hasActiveFilters && (
@@ -553,6 +578,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
           setFilterClauses(draftFilterClauses);
         }}
         title="Filter globe"
+        exclusiveKinds={['favorites']}
       />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/60 p-1">
@@ -892,6 +918,9 @@ function isTripFilterClauseActive(clause: TripFilterClause) {
   }
   if (clause.kind === 'tripPeople') {
     return clause.personIds.length > 0;
+  }
+  if (clause.kind === 'favorites') {
+    return true;
   }
   return false;
 }

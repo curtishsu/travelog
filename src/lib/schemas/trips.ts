@@ -66,6 +66,7 @@ export const tripUpdateSchema = z
 export const tripDayUpdateSchema = z.object({
   highlight: z.string().max(240).nullable().optional(),
   journalEntry: z.string().max(7000).nullable().optional(),
+  isFavorite: z.boolean().optional(),
   hashtags: z
     .array(
       z

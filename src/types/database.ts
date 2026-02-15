@@ -81,6 +81,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           is_locked: boolean;
+          is_favorite: boolean;
         };
         Insert: {
           id?: string;
@@ -92,6 +93,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           is_locked?: boolean;
+          is_favorite?: boolean;
         };
         Update: Partial<Database['public']['Tables']['trip_days']['Insert']>;
       };

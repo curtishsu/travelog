@@ -224,7 +224,7 @@ export function useUpdateTripDay(
   return useMutation({
     mutationFn: ({ tripId, dayIndex, payload }: UpdateTripDayVariables) =>
       updateTripDay(tripId, dayIndex, payload),
-    onSuccess: (tripDay, variables, context, mutation) => {
+    onSuccess: async (tripDay, variables, context, mutation) => {
       queryClient.setQueryData(tripDetailKey(variables.tripId), (prev: TripDetail | undefined) => {
         if (!prev) {
           return prev;
@@ -232,6 +232,7 @@ export function useUpdateTripDay(
         const nextDays = prev.trip_days.map((day) => (day.id === tripDay.id ? tripDay : day));
         return { ...prev, trip_days: nextDays };
       });
+      await queryClient.invalidateQueries({ queryKey: tripsListKey });
       options?.onSuccess?.(tripDay, variables, context, mutation);
     },
     ...options

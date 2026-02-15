@@ -11,6 +11,7 @@ export type TripDayHashtagSummary = {
 export type TripDaySummary = {
   id: string;
   day_index: number;
+  is_favorite: boolean;
   trip_day_hashtags: TripDayHashtagSummary[];
 };
 
