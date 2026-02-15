@@ -14,6 +14,7 @@ const supabaseRemotePattern =
     : null;
 
 const nextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   experimental: {
     typedRoutes: true
   },
