@@ -501,19 +501,53 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
 
   const currentMonth = months[monthIndex] ?? null;
   const currentLabel = currentMonth?.label ?? 'Timeline';
-  const tripDayCountByTrip = useMemo(() => {
-    const dayIdsByTrip = new Map<string, Set<string>>();
+  const assignedDayCountByTripCity = useMemo(() => {
+    type DayLocation = {
+      tripId: string;
+      locationId: string;
+      displayName: string;
+      cityKey: string;
+    };
+    const dayLocations = new Map<string, DayLocation[]>();
     for (const location of locations) {
-      const bucket = dayIdsByTrip.get(location.tripId) ?? new Set<string>();
-      bucket.add(location.tripDayId);
-      dayIdsByTrip.set(location.tripId, bucket);
+      const dayKey = `${location.tripId}|${location.tripDayId}`;
+      const bucket = dayLocations.get(dayKey) ?? [];
+      bucket.push({
+        tripId: location.tripId,
+        locationId: location.locationId,
+        displayName: location.city ?? location.displayName,
+        cityKey: normalizeCityKey({
+          city: location.city,
+          region: location.region,
+          country: location.country,
+          displayName: location.displayName,
+          lat: location.lat,
+          lng: location.lng
+        })
+      });
+      dayLocations.set(dayKey, bucket);
     }
 
-    const counts = new Map<string, number>();
-    dayIdsByTrip.forEach((dayIds, tripId) => {
-      counts.set(tripId, dayIds.size);
+    const countsByTripCity = new Map<string, number>();
+    dayLocations.forEach((locationsForDay) => {
+      const dedupByCity = new Map<string, DayLocation>();
+      for (const location of locationsForDay) {
+        if (!dedupByCity.has(location.cityKey)) {
+          dedupByCity.set(location.cityKey, location);
+        }
+      }
+      const uniqueLocations = Array.from(dedupByCity.values()).sort((a, b) => {
+        const byLabel = a.displayName.localeCompare(b.displayName);
+        if (byLabel !== 0) return byLabel;
+        return a.locationId.localeCompare(b.locationId);
+      });
+      const firstLocation = uniqueLocations[0];
+      if (!firstLocation) return;
+      const tripCityKey = `${firstLocation.tripId}|${firstLocation.cityKey}`;
+      countsByTripCity.set(tripCityKey, (countsByTripCity.get(tripCityKey) ?? 0) + 1);
     });
-    return counts;
+
+    return countsByTripCity;
   }, [locations]);
 
   useEffect(() => {
@@ -580,12 +614,12 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
   };
 
   const stats = useMemo<TimelineStats>(() => {
-    const shownTripIds = new Set<string>();
+    const shownTripCityKeys = new Set<string>();
     const cityKeys = new Set<string>();
     const countries = new Set<string>();
 
     for (const pin of pinsShown) {
-      shownTripIds.add(pin.tripId);
+      shownTripCityKeys.add(`${pin.tripId}|${pin.cityKey}`);
       cityKeys.add(pin.cityKey);
       if (pin.country) {
         countries.add(pin.country);
@@ -593,8 +627,8 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
     }
 
     let travelDays = 0;
-    shownTripIds.forEach((tripId) => {
-      travelDays += tripDayCountByTrip.get(tripId) ?? 0;
+    shownTripCityKeys.forEach((tripCityKey) => {
+      travelDays += assignedDayCountByTripCity.get(tripCityKey) ?? 0;
     });
 
     return {
@@ -602,7 +636,7 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
       cities: cityKeys.size,
       countries: countries.size
     };
-  }, [pinsShown, tripDayCountByTrip]);
+  }, [pinsShown, assignedDayCountByTripCity]);
 
   useEffect(() => {
     const previousStats = previousStatsRef.current;
