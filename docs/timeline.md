@@ -41,3 +41,14 @@ Implementation decisions (locked)
     - Hide the location card between steps, then show it again for the new city.
 - Date line behavior:
     - Keep the date line identical while stepping through multiple city updates on the same day.
+
+## v3 Improvements
+Stats are incorrect.
+- Days: this should be total days traveled. Thus, even if it is one location, the days incremented should be updated by the total number of travel days. 
+- Trips: Update this to be Cities. This should be the count of total unique cities visited across all trips
+
+New Location. 
+If a location is showing up as a location for the first time. Have it be noticeable. Examples include having the pin be gold for that iteration
+
+Banner Metadata:
+Remove the 'Now Visitng' text

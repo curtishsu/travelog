@@ -3,9 +3,8 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 import mapboxgl from 'mapbox-gl';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
@@ -15,10 +14,12 @@ import { formatDateForDisplay } from '@/lib/date';
 
 type TimelinePin = {
   id: string;
+  cityKey: string;
   lat: number;
   lng: number;
   label: string;
   country: string | null;
+  isFirstVisitGlobal: boolean;
   tripId: string;
   tripName: string;
   date: string;
@@ -53,7 +54,7 @@ type TimelinePlayerProps = {
 
 type TimelineStats = {
   travelDays: number;
-  trips: number;
+  cities: number;
   countries: number;
 };
 
@@ -118,14 +119,6 @@ function normalizeCityKey(entry: {
   return `${city}|${region}|${country}`;
 }
 
-function hashStringToUnitInterval(input: string) {
-  let hash = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
-  }
-  return (hash % 10_000) / 10_000;
-}
-
 function toRadians(value: number) {
   return (value * Math.PI) / 180;
 }
@@ -149,6 +142,12 @@ function haversineDistanceKm(
 
 function clampDurationMs(value: number) {
   return Math.max(CITY_FLY_MIN_DURATION_MS, Math.min(CITY_FLY_MAX_DURATION_MS, value));
+}
+
+function pickRandomPhoto<T>(photos: T[]) {
+  if (!photos.length) return null;
+  const photoIndex = Math.floor(Math.random() * photos.length);
+  return photos[Math.min(photoIndex, photos.length - 1)] ?? null;
 }
 
 function buildTimeline(locations: MapLocationEntry[]): TimelineMonth[] {
@@ -247,6 +246,7 @@ function buildTimeline(locations: MapLocationEntry[]): TimelineMonth[] {
   const monthKeys = buildMonthRange(startMonthKey, endMonthKey);
 
   const seenCitiesByTrip = new Map<string, Set<string>>();
+  const seenCitiesGlobal = new Set<string>();
   const stepsByMonth = new Map<string, TimelineStep[]>();
 
   const pushStep = (step: TimelineStep) => {
@@ -293,15 +293,18 @@ function buildTimeline(locations: MapLocationEntry[]): TimelineMonth[] {
 
       const pin: TimelinePin = {
         id: `${day.tripDayId}|${cityKey}`,
+        cityKey,
         lat: location.lat,
         lng: location.lng,
         label,
         country: location.country,
+        isFirstVisitGlobal: !seenCitiesGlobal.has(cityKey),
         tripId: day.tripId,
         tripName: day.tripName,
         date: day.date,
         dayIndex: day.dayIndex
       };
+      seenCitiesGlobal.add(cityKey);
 
       pushStep({
         id: pin.id,
@@ -407,9 +410,17 @@ function TimelineGlobe({
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
     if (!activePin) {
+      markersRef.current.forEach((marker) => {
+        marker.getElement().style.color = '#38bdf8';
+      });
       onActivePinSettled?.(null);
       return;
     }
+
+    markersRef.current.forEach((marker, markerPinId) => {
+      const isActiveFirstVisit = activePin.isFirstVisitGlobal && markerPinId === activePin.id;
+      marker.getElement().style.color = isActiveFirstVisit ? '#fbbf24' : '#38bdf8';
+    });
 
     let settled = false;
     const settle = () => {
@@ -450,8 +461,6 @@ function TimelineGlobe({
 }
 
 export function TimelinePlayer({ locations }: TimelinePlayerProps) {
-  const searchParams = useSearchParams();
-
   const months = useMemo(() => buildTimeline(locations), [locations]);
 
   const [running, setRunning] = useState(true);
@@ -477,17 +486,55 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
   } | null>(null);
   const [changedStats, setChangedStats] = useState<{
     travelDays: boolean;
-    trips: boolean;
+    cities: boolean;
     countries: boolean;
   }>({
     travelDays: false,
-    trips: false,
+    cities: false,
     countries: false
   });
   const previousStatsRef = useRef<TimelineStats | null>(null);
+  const monthIndexRef = useRef(0);
+  const holdDelayTimeoutRef = useRef<number | null>(null);
+  const holdIntervalRef = useRef<number | null>(null);
+  const isHoldingArrowRef = useRef(false);
 
   const currentMonth = months[monthIndex] ?? null;
   const currentLabel = currentMonth?.label ?? 'Timeline';
+  const tripDayCountByTrip = useMemo(() => {
+    const dayIdsByTrip = new Map<string, Set<string>>();
+    for (const location of locations) {
+      const bucket = dayIdsByTrip.get(location.tripId) ?? new Set<string>();
+      bucket.add(location.tripDayId);
+      dayIdsByTrip.set(location.tripId, bucket);
+    }
+
+    const counts = new Map<string, number>();
+    dayIdsByTrip.forEach((dayIds, tripId) => {
+      counts.set(tripId, dayIds.size);
+    });
+    return counts;
+  }, [locations]);
+
+  useEffect(() => {
+    monthIndexRef.current = monthIndex;
+  }, [monthIndex]);
+
+  const stopArrowHold = () => {
+    if (holdDelayTimeoutRef.current !== null) {
+      window.clearTimeout(holdDelayTimeoutRef.current);
+      holdDelayTimeoutRef.current = null;
+    }
+    if (holdIntervalRef.current !== null) {
+      window.clearInterval(holdIntervalRef.current);
+      holdIntervalRef.current = null;
+    }
+    isHoldingArrowRef.current = false;
+  };
+
+  useEffect(() => {
+    return () => stopArrowHold();
+  }, []);
 
   const jumpToMonth = (targetMonthIndex: number) => {
     const clampedMonthIndex = Math.max(0, Math.min(targetMonthIndex, Math.max(months.length - 1, 0)));
@@ -516,25 +563,46 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
     setFavoriteOverlay(null);
   };
 
+  const scrubMonthBy = (delta: -1 | 1) => {
+    jumpToMonth(monthIndexRef.current + delta);
+  };
+
+  const startArrowHold = (delta: -1 | 1) => {
+    stopArrowHold();
+    isHoldingArrowRef.current = false;
+    scrubMonthBy(delta);
+    holdDelayTimeoutRef.current = window.setTimeout(() => {
+      isHoldingArrowRef.current = true;
+      holdIntervalRef.current = window.setInterval(() => {
+        scrubMonthBy(delta);
+      }, 95);
+    }, 280);
+  };
+
   const stats = useMemo<TimelineStats>(() => {
-    const dayKeys = new Set<string>();
-    const tripIds = new Set<string>();
+    const shownTripIds = new Set<string>();
+    const cityKeys = new Set<string>();
     const countries = new Set<string>();
 
     for (const pin of pinsShown) {
-      dayKeys.add(`${pin.tripId}|${pin.date}`);
-      tripIds.add(pin.tripId);
+      shownTripIds.add(pin.tripId);
+      cityKeys.add(pin.cityKey);
       if (pin.country) {
         countries.add(pin.country);
       }
     }
 
+    let travelDays = 0;
+    shownTripIds.forEach((tripId) => {
+      travelDays += tripDayCountByTrip.get(tripId) ?? 0;
+    });
+
     return {
-      travelDays: dayKeys.size,
-      trips: tripIds.size,
+      travelDays,
+      cities: cityKeys.size,
       countries: countries.size
     };
-  }, [pinsShown]);
+  }, [pinsShown, tripDayCountByTrip]);
 
   useEffect(() => {
     const previousStats = previousStatsRef.current;
@@ -545,13 +613,13 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
 
     const nextChangedStats = {
       travelDays: previousStats.travelDays !== stats.travelDays,
-      trips: previousStats.trips !== stats.trips,
+      cities: previousStats.cities !== stats.cities,
       countries: previousStats.countries !== stats.countries
     };
 
     previousStatsRef.current = stats;
 
-    if (!nextChangedStats.travelDays && !nextChangedStats.trips && !nextChangedStats.countries) {
+    if (!nextChangedStats.travelDays && !nextChangedStats.cities && !nextChangedStats.countries) {
       return;
     }
 
@@ -559,18 +627,13 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
     const timer = window.setTimeout(() => {
       setChangedStats({
         travelDays: false,
-        trips: false,
+        cities: false,
         countries: false
       });
     }, 450);
 
     return () => window.clearTimeout(timer);
   }, [stats]);
-
-  const backHref = useMemo(() => {
-    const query = searchParams.toString();
-    return query ? `/map?${query}` : '/map';
-  }, [searchParams]);
 
   useEffect(() => {
     if (!running) return;
@@ -628,12 +691,7 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
       setSettledPinId(null);
     }
 
-    if (step.dayPhotos.length > 0) {
-      const photoIndex = Math.floor(hashStringToUnitInterval(`${step.id}|photo-index`) * step.dayPhotos.length);
-      setPhotoMoment(step.dayPhotos[Math.min(photoIndex, step.dayPhotos.length - 1)] ?? null);
-    } else {
-      setPhotoMoment(null);
-    }
+    setPhotoMoment(pickRandomPhoto(step.dayPhotos));
 
     if (step.favoriteHighlight) {
       setFavoriteOverlay({
@@ -704,22 +762,45 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
 
   return (
     <div className="space-y-5">
-      <div className="relative flex items-start justify-end">
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-center">
+      <div className="relative z-50 w-full">
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="absolute right-0 top-0 h-10 w-10 rounded-full border border-slate-500/60 bg-slate-900/85 shadow-md shadow-black/35 md:h-11 md:w-11"
+          onClick={() => setRunning((prev) => !prev)}
+          aria-label={running ? 'Pause timeline playback' : 'Play timeline playback'}
+        >
+          {running ? <Pause className="h-4 w-4 md:h-[18px] md:w-[18px]" /> : <Play className="h-4 w-4 md:h-[18px] md:w-[18px]" />}
+        </Button>
+        <div className="flex flex-col items-center">
           <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Timeline</p>
-          <div className="pointer-events-auto mt-1 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2">
             <Button
               type="button"
               variant="secondary"
               size="icon"
               className="h-8 w-8 md:h-9 md:w-9"
               disabled={monthIndex <= 0}
-              onClick={() => jumpToMonth(monthIndex - 1)}
+              onPointerDown={(event) => {
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                event.preventDefault();
+                startArrowHold(-1);
+              }}
+              onPointerUp={stopArrowHold}
+              onPointerCancel={stopArrowHold}
+              onPointerLeave={stopArrowHold}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  scrubMonthBy(-1);
+                }
+              }}
               aria-label="Go to previous month"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <h1 className="min-w-[160px] text-center text-3xl font-semibold text-white md:min-w-[220px] md:text-5xl">
+            <h1 className="min-w-[140px] text-center text-[1.9rem] font-semibold leading-none text-white md:min-w-[220px] md:text-5xl">
               {currentLabel}
             </h1>
             <Button
@@ -728,27 +809,25 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
               size="icon"
               className="h-8 w-8 md:h-9 md:w-9"
               disabled={!months.length || monthIndex >= months.length - 1}
-              onClick={() => jumpToMonth(monthIndex + 1)}
+              onPointerDown={(event) => {
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                event.preventDefault();
+                startArrowHold(1);
+              }}
+              onPointerUp={stopArrowHold}
+              onPointerCancel={stopArrowHold}
+              onPointerLeave={stopArrowHold}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  scrubMonthBy(1);
+                }
+              }}
               aria-label="Go to next month"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-        </div>
-        <div className="flex items-center gap-2 pt-1">
-          <Button type="button" variant="secondary" size="sm" onClick={() => setRunning((prev) => !prev)}>
-            {running ? 'Pause' : 'Play'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-slate-300 hover:text-white"
-            asChild
-          >
-            <a href={backHref} aria-label="Exit timeline">
-              <X className="h-5 w-5" />
-            </a>
-          </Button>
         </div>
       </div>
 
@@ -757,7 +836,9 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
 
         {showLocationCard && activeStep?.pin ? (
           <div className="pointer-events-none absolute left-4 top-4 z-20 w-full max-w-xs rounded-2xl border border-sky-400/35 bg-slate-950/85 p-4 shadow-xl shadow-black/40 backdrop-blur">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-300">Now visiting</p>
+            {activeStep.pin.isFirstVisitGlobal ? (
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-300">(First Time)</p>
+            ) : null}
             <p className="mt-2 text-lg font-semibold text-white">{activeStep.pin.label}</p>
             <p className="mt-1 text-xs text-slate-300">
               {activeStep.tripName} • Day {activeStep.dayIndex} • {formatDateForDisplay(activeStep.date)}
@@ -826,13 +907,13 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
               </div>
               <div
                 className={`rounded-xl border bg-slate-950/88 px-2.5 py-2 shadow-lg shadow-black/30 backdrop-blur transition-all duration-300 ${
-                  changedStats.trips
+                  changedStats.cities
                     ? 'scale-[1.03] border-sky-300/70 bg-sky-500/18'
                     : 'border-slate-700/90'
                 }`}
               >
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">Trips</p>
-                <p className="mt-1 text-xl font-semibold text-white">{stats.trips}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">Cities</p>
+                <p className="mt-1 text-xl font-semibold text-white">{stats.cities}</p>
               </div>
               <div
                 className={`rounded-xl border bg-slate-950/88 px-2.5 py-2 shadow-lg shadow-black/30 backdrop-blur transition-all duration-300 ${
@@ -855,8 +936,8 @@ export function TimelinePlayer({ locations }: TimelinePlayerProps) {
           <p className="mt-2 text-4xl font-semibold text-white">{stats.travelDays}</p>
         </div>
         <div className="rounded-3xl border border-slate-700 bg-slate-950/75 p-5 shadow-lg shadow-black/20">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Trips</p>
-          <p className="mt-2 text-4xl font-semibold text-white">{stats.trips}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Cities</p>
+          <p className="mt-2 text-4xl font-semibold text-white">{stats.cities}</p>
         </div>
         <div className="rounded-3xl border border-slate-700 bg-slate-950/75 p-5 shadow-lg shadow-black/20">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Unique countries</p>
