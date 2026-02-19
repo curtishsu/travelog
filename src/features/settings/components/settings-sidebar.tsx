@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 
 import { useTripsList } from '@/features/trips/hooks';
@@ -11,13 +12,13 @@ export function SettingsSidebar() {
   const { data: trips } = useTripsList();
   const tripCount = trips?.length ?? 0;
 
-  const settingsNavItems = [
-    { href: '/settings/privacy', label: 'Privacy & Guest Mode' },
-    { href: '/settings/trip-groups', label: 'Trip Groups' },
+  const settingsNavItems: Array<{ href: Route; label: string }> = [
+    { href: '/settings/privacy' as Route, label: 'Privacy & Guest Mode' },
+    { href: '/settings/trip-groups' as Route, label: 'Trip Groups' },
     ...(tripCount >= 10
-      ? [{ href: '/journal/quick-add', label: 'Build Travel History' }]
+      ? [{ href: '/journal/quick-add' as Route, label: 'Build Travel History' }]
       : [])
-  ] as const;
+  ];
 
   return (
     <aside className="rounded-3xl border border-slate-800 bg-slate-900/40 p-4">
