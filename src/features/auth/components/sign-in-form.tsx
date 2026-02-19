@@ -12,16 +12,19 @@ export function SignInForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    setNeedsEmailConfirmation(false);
     setIsSubmitting(true);
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     setIsSubmitting(false);
     if (signInError) {
       setError(signInError.message);
+      setNeedsEmailConfirmation(/confirm|verification|not confirmed/i.test(signInError.message));
       return;
     }
     router.push('/journal');
@@ -51,6 +54,9 @@ export function SignInForm() {
         />
       </div>
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
+      {needsEmailConfirmation ? (
+        <p className="text-xs text-slate-400">Check your inbox for the confirmation email, then try signing in again.</p>
+      ) : null}
       <Button type="submit" disabled={isSubmitting} className="w-full">
         {isSubmitting ? 'Signing in…' : 'Sign in'}
       </Button>

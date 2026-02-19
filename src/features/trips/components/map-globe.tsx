@@ -152,6 +152,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
     const query = searchParams.toString();
     return query ? `/timeline?${query}` : '/timeline';
   }, [searchParams]);
+  const showQuickAddCta = searchParams.get('quickAdd') === '1';
 
   useEffect(() => {
     if (focusedGroupId && !groups.some((group) => group.id === focusedGroupId)) {
@@ -548,6 +549,13 @@ export function MapGlobe({ locations }: MapGlobeProps) {
             </div>
           </div>
         </div>
+        {showQuickAddCta ? (
+          <div className="flex justify-start">
+            <Button variant="secondary" size="sm" asChild>
+              <a href="/journal/quick-add">Add more trips</a>
+            </Button>
+          </div>
+        ) : null}
         {hasActiveFilters && (
           <div className="flex justify-end">
             <div className="flex flex-wrap items-center justify-end gap-2">

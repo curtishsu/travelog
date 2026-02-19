@@ -14,11 +14,12 @@ export function createSupabaseServerClient() {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        set(name: string, value: string, options: Parameters<typeof cookieStore.set>[2]) {
-          cookieStore.set({ name, value, ...options });
+        set() {
+          // Server Components can run with a read-only cookie store in App Router.
+          // Avoid writing cookies from here; refresh should happen in route handlers.
         },
-        remove(name: string) {
-          cookieStore.delete({ name });
+        remove() {
+          // Same as set(): do not mutate cookies in Server Components.
         }
       }
     }

@@ -1,0 +1,30 @@
+{
+  "name": "Travelog",
+  "short_name": "Travelog",
+  "description": "Travelog - personal travel logging and reflection.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#38bdf8",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Journal",
+      "short_name": "Journal",
+      "url": "/journal"
+    },
+    {
+      "name": "Trips",
+      "short_name": "Trips",
+      "url": "/trips"
+    }
+  ]
+}

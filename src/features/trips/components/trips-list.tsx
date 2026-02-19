@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 import { TripCard } from '@/features/trips/components/trip-card';
+import { SignedOutTravelPrompt } from '@/features/auth/components/signed-out-travel-prompt';
 import { useTripGroups, useTripsList } from '@/features/trips/hooks';
 import { Button } from '@/components/ui/button';
 import { TripFiltersDialog } from '@/features/trips/components/trip-filters-dialog';
@@ -103,20 +104,10 @@ export function TripsList() {
   if (isError) {
     if ((error as Error & { status?: number } | null)?.status === 401) {
       return (
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
-          <h3 className="text-2xl font-semibold text-white">Log in to see your trips</h3>
-          <p className="mt-3 text-sm text-slate-400">
-            Sign in (or create an account) to view your trips.
-          </p>
-          <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
-            <Button asChild>
-              <Link href="/auth/signin">Sign in</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link href="/auth/signup">Sign up</Link>
-            </Button>
-          </div>
-        </div>
+        <SignedOutTravelPrompt
+          heading="Log in to see your trips"
+          body="Sign in (or create an account) to unlock your journal, globe, and stats."
+        />
       );
     }
     return (

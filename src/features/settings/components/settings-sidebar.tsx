@@ -3,15 +3,21 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { useTripsList } from '@/features/trips/hooks';
 import { cn } from '@/lib/utils';
-
-const settingsNavItems = [
-  { href: '/settings/privacy', label: 'Privacy & Guest Mode' },
-  { href: '/settings/trip-groups', label: 'Trip Groups' }
-] as const;
 
 export function SettingsSidebar() {
   const pathname = usePathname();
+  const { data: trips } = useTripsList();
+  const tripCount = trips?.length ?? 0;
+
+  const settingsNavItems = [
+    { href: '/settings/privacy', label: 'Privacy & Guest Mode' },
+    { href: '/settings/trip-groups', label: 'Trip Groups' },
+    ...(tripCount >= 10
+      ? [{ href: '/journal/quick-add', label: 'Build Travel History' }]
+      : [])
+  ] as const;
 
   return (
     <aside className="rounded-3xl border border-slate-800 bg-slate-900/40 p-4">

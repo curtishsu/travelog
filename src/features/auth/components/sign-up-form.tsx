@@ -13,17 +13,19 @@ export function SignUpForm() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    setSuccessMessage(null);
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
     setIsSubmitting(true);
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password
     });
@@ -32,8 +34,27 @@ export function SignUpForm() {
       setError(signUpError.message);
       return;
     }
-    router.push('/journal');
-    router.refresh();
+
+    if (data.session) {
+      router.push('/journal');
+      router.refresh();
+      return;
+    }
+
+    setSuccessMessage('Account created. Check your email and click the confirmation link before signing in.');
+  }
+
+  if (successMessage) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+          {successMessage}
+        </div>
+        <Button type="button" onClick={() => router.push('/auth/signin')} className="w-full">
+          Go to sign in
+        </Button>
+      </div>
+    );
   }
 
   return (

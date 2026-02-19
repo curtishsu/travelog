@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { SignedOutTravelPrompt } from '@/features/auth/components/signed-out-travel-prompt';
 import { TripCard } from '@/features/trips/components/trip-card';
 import { TripFiltersDialog } from '@/features/trips/components/trip-filters-dialog';
 import {
@@ -85,6 +86,8 @@ export function JournalTrips() {
     () => (data ?? []).filter((trip) => allowedTripIds.has(trip.id)),
     [data, allowedTripIds]
   );
+  const tripCount = data?.length ?? 0;
+  const showQuickAddEntry = !isLoading && !isError && tripCount < 10;
 
   return (
     <div className="space-y-8">
@@ -131,20 +134,10 @@ export function JournalTrips() {
 
       {isError ? (
         (error as Error & { status?: number } | null)?.status === 401 ? (
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center">
-            <h3 className="text-2xl font-semibold text-white">Log in to see your trips</h3>
-            <p className="mt-3 text-sm text-slate-400">
-              Sign in (or create an account) to view your journal.
-            </p>
-            <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
-              <Button asChild>
-                <Link href="/auth/signin">Sign in</Link>
-              </Button>
-              <Button asChild variant="secondary">
-                <Link href="/auth/signup">Sign up</Link>
-              </Button>
-            </div>
-          </div>
+          <SignedOutTravelPrompt
+            heading="Log in to see your trips"
+            body="Sign in (or create an account) to view your journal and build your travel timeline."
+          />
         ) : (
         <div className="rounded-3xl border border-red-500/40 bg-red-500/10 p-8 text-center text-red-200">
           <p className="text-lg font-semibold">We couldn’t load your trips.</p>
@@ -174,6 +167,16 @@ export function JournalTrips() {
             <TripCard key={trip.id} trip={trip} showViewTripBadge={false} />
           ))}
         </div>
+      ) : null}
+
+      {showQuickAddEntry ? (
+        <Link
+          href="/journal/quick-add"
+          className="block rounded-3xl border border-slate-800 bg-slate-900/40 p-6 transition hover:border-brand/60 hover:bg-slate-900/60"
+        >
+          <p className="text-xl font-semibold text-white">Build Your Travel History</p>
+          <p className="mt-2 text-sm text-slate-300">Add Past Trips to See Where You&apos;ve Been</p>
+        </Link>
       ) : null}
     </div>
   );
