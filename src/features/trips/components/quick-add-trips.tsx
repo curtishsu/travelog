@@ -501,7 +501,7 @@ export function QuickAddTrips() {
     return (
       <SignedOutTravelPrompt
         heading="Log in to build your travel history"
-        body="Quick Add is available once you are signed in so your trips can be saved to your account."
+        body="Sign in to save trips with Quick Add."
       />
     );
   }
@@ -510,10 +510,7 @@ export function QuickAddTrips() {
     <div className="space-y-6">
       <header className="space-y-3">
         <h1 className="text-3xl font-semibold text-white">Build Your Travel History</h1>
-        <p className="text-sm italic text-slate-300">
-          Build out your travel history by adding the places you&apos;ve already been. Click the More button to add
-          specific details. To add journal entries, click into the trip on the journal tab.
-        </p>
+        <p className="text-sm italic text-slate-300">Quickly add past trips to watch your travelog come alive</p>
       </header>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/40 p-4 sm:p-5">

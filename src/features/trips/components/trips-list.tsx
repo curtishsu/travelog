@@ -106,7 +106,7 @@ export function TripsList() {
       return (
         <SignedOutTravelPrompt
           heading="Log in to see your trips"
-          body="Sign in (or create an account) to unlock your journal, globe, and stats."
+          body="Sign in to unlock your trips, globe, and stats."
         />
       );
     }

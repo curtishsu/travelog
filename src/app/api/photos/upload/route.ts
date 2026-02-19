@@ -66,10 +66,22 @@ async function convertHeicBufferToJpeg(inputBuffer: Buffer) {
     format: 'JPEG',
     quality: 0.9
   });
-  return Buffer.isBuffer(converted) ? converted : Buffer.from(converted);
+  if (Buffer.isBuffer(converted)) {
+    return converted;
+  }
+
+  if (converted instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(converted));
+  }
+
+  if (ArrayBuffer.isView(converted)) {
+    return Buffer.from(converted.buffer, converted.byteOffset, converted.byteLength);
+  }
+
+  throw new Error('HEIC conversion returned unsupported binary payload.');
 }
 
-async function processImageBuffers(sourceBuffer: Buffer) {
+async function processImageBuffers(sourceBuffer: Uint8Array) {
   const processor = sharp(sourceBuffer, { failOn: 'none' }).rotate();
   const fullProcessor = processor
     .clone()
@@ -166,7 +178,7 @@ export async function POST(request: NextRequest) {
 
     const imageProcessingStart = Date.now();
     const likelyHeic = isLikelyHeic(inputBuffer, file);
-    let processingBuffer = inputBuffer;
+    let processingBuffer: Uint8Array = inputBuffer;
     let wasConvertedFromHeic = false;
 
     if (likelyHeic) {

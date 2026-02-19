@@ -136,7 +136,7 @@ export function JournalTrips() {
         (error as Error & { status?: number } | null)?.status === 401 ? (
           <SignedOutTravelPrompt
             heading="Log in to see your trips"
-            body="Sign in (or create an account) to view your journal and build your travel timeline."
+            body="Sign in to unlock your journal and globe."
           />
         ) : (
         <div className="rounded-3xl border border-red-500/40 bg-red-500/10 p-8 text-center text-red-200">
@@ -172,10 +172,13 @@ export function JournalTrips() {
       {showQuickAddEntry ? (
         <Link
           href="/journal/quick-add"
-          className="block rounded-3xl border border-slate-800 bg-slate-900/40 p-6 transition hover:border-brand/60 hover:bg-slate-900/60"
+          className="group block rounded-3xl border border-slate-800 bg-slate-900/40 p-10 text-center transition hover:border-brand/60 hover:bg-slate-900/60"
         >
-          <p className="text-xl font-semibold text-white">Build Your Travel History</p>
-          <p className="mt-2 text-sm text-slate-300">Add Past Trips to See Where You&apos;ve Been</p>
+          <p className="text-2xl font-semibold text-white">Build Your Travel History</p>
+          <p className="mt-3 text-sm text-slate-400">Quickly add past trips to watch your travelog come alive</p>
+          <span className="mt-6 inline-flex h-10 items-center justify-center rounded-full bg-brand px-4 text-sm font-medium text-white transition group-hover:bg-brand-dark">
+            Add Past Trips
+          </span>
         </Link>
       ) : null}
     </div>

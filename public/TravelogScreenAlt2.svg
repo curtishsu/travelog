@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 688 1000" role="img" aria-label="Travelog Southeast Asia preview">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#04122f"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+  </defs>
+  <rect width="688" height="1000" rx="36" fill="url(#bg2)"/>
+  <rect x="18" y="18" width="652" height="964" rx="30" fill="none" stroke="#1fb6ff" stroke-width="3"/>
+  <rect x="44" y="54" width="600" height="178" rx="32" fill="#050f2c" stroke="#1fb6ff" stroke-width="2"/>
+  <text x="344" y="104" text-anchor="middle" fill="#f7d14a" font-size="42" font-weight="700">(FIRST TIME)</text>
+  <text x="344" y="152" text-anchor="middle" fill="#ffffff" font-size="58" font-weight="700">Bali, Indonesia</text>
+  <text x="344" y="198" text-anchor="middle" fill="#a9b4c8" font-size="40">Indonesia 2023 " Day 5 " Sep 10, 2023</text>
+  <g fill="#41b6ff" opacity="0.95">
+    <circle cx="365" cy="474" r="14"/><circle cx="390" cy="510" r="14"/><circle cx="420" cy="538" r="14"/>
+    <circle cx="338" cy="500" r="14"/><circle cx="305" cy="518" r="14"/><circle cx="280" cy="486" r="14"/>
+    <circle cx="452" cy="500" r="14"/><circle cx="488" cy="470" r="14"/>
+  </g>
+  <g fill="#facc15">
+    <circle cx="360" cy="532" r="12"/><circle cx="435" cy="476" r="12"/><circle cx="292" cy="540" r="12"/>
+  </g>
+  <rect x="430" y="618" width="220" height="246" rx="28" fill="#09172d" stroke="#1fb6ff" stroke-width="2"/>
+  <rect x="442" y="632" width="196" height="170" rx="20" fill="#15263a"/>
+  <text x="540" y="840" text-anchor="middle" fill="#d7e2f2" font-size="42" font-weight="600" letter-spacing="3">MEMORY</text>
+  <rect x="24" y="864" width="200" height="116" rx="26" fill="#121a35" stroke="#274d9e" stroke-width="2"/>
+  <rect x="244" y="864" width="200" height="116" rx="26" fill="#121a35" stroke="#274d9e" stroke-width="2"/>
+  <rect x="464" y="864" width="200" height="116" rx="26" fill="#121a35" stroke="#274d9e" stroke-width="2"/>
+  <text x="44" y="906" fill="#9aa5ba" font-size="40" font-weight="700">DAYS</text>
+  <text x="44" y="956" fill="#53c7ff" font-size="64" font-weight="800">144</text>
+  <text x="264" y="906" fill="#9aa5ba" font-size="40" font-weight="700">CITIES</text>
+  <text x="264" y="956" fill="#53c7ff" font-size="64" font-weight="800">31</text>
+  <text x="484" y="906" fill="#9aa5ba" font-size="40" font-weight="700">COUNTRIES</text>
+  <text x="484" y="956" fill="#53c7ff" font-size="64" font-weight="800">9</text>
+</svg>
