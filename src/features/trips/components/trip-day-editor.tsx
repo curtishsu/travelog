@@ -46,6 +46,144 @@ function createSearchId() {
   return `search-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  jpe: 'image/jpeg',
+  jfif: 'image/jpeg',
+  jjpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  avif: 'image/avif',
+  tiff: 'image/tiff',
+  tif: 'image/tiff',
+  heic: 'image/heic',
+  heif: 'image/heif'
+};
+
+function getFileExtension(name: string) {
+  const parts = name.toLowerCase().split('.');
+  return parts.length > 1 ? parts[parts.length - 1] : '';
+}
+
+function isHeicLike(file: File) {
+  const extension = getFileExtension(file.name);
+  return (
+    extension === 'heic' ||
+    extension === 'heif' ||
+    file.type === 'image/heic' ||
+    file.type === 'image/heif'
+  );
+}
+
+async function hasHeicContainerSignature(file: File) {
+  try {
+    const header = new Uint8Array(await file.slice(0, 64).arrayBuffer());
+    if (header.length < 16) {
+      return false;
+    }
+
+    const boxType = String.fromCharCode(...header.slice(4, 8));
+    if (boxType !== 'ftyp') {
+      return false;
+    }
+
+    const majorBrand = String.fromCharCode(...header.slice(8, 12)).toLowerCase();
+    const heicBrands = new Set([
+      'heic',
+      'heix',
+      'hevc',
+      'hevx',
+      'heim',
+      'heis',
+      'hevm',
+      'mif1',
+      'msf1'
+    ]);
+
+    if (heicBrands.has(majorBrand)) {
+      return true;
+    }
+
+    // Compatible brands start at byte 16 in the ftyp box and are 4-byte identifiers.
+    for (let offset = 16; offset + 4 <= header.length; offset += 4) {
+      const brand = String.fromCharCode(...header.slice(offset, offset + 4)).toLowerCase();
+      if (heicBrands.has(brand)) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function hasJpegSignature(file: File) {
+  try {
+    const header = new Uint8Array(await file.slice(0, 3).arrayBuffer());
+    return header.length === 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  } catch {
+    return false;
+  }
+}
+
+function inferImageMimeType(file: File) {
+  const extension = getFileExtension(file.name);
+  return IMAGE_MIME_BY_EXTENSION[extension] ?? null;
+}
+
+async function normalizePhotoForUpload(file: File) {
+  const looksLikeHeic = isHeicLike(file) || (await hasHeicContainerSignature(file));
+  const isMislabeledJpeg = file.type === 'image/jpeg' && !(await hasJpegSignature(file));
+
+  if (isMislabeledJpeg) {
+    console.warn('[photo upload] file claims JPEG but has non-JPEG signature', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+  }
+
+  if (looksLikeHeic || isMislabeledJpeg) {
+    if (typeof window === 'undefined') {
+      throw new Error('HEIC conversion is only available in the browser.');
+    }
+
+    const { default: heic2any } = await import('heic2any');
+    const conversionResult = await heic2any({
+      blob: file,
+      toType: 'image/jpeg',
+      quality: 0.9
+    });
+
+    const convertedBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+    const safeBlob = convertedBlob instanceof Blob ? convertedBlob : new Blob([convertedBlob]);
+    const normalizedName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
+
+    return new File([safeBlob], normalizedName, {
+      type: 'image/jpeg',
+      lastModified: file.lastModified
+    });
+  }
+
+  if (file.type.startsWith('image/')) {
+    return file;
+  }
+
+  const inferredMimeType = inferImageMimeType(file);
+  if (inferredMimeType) {
+    return new File([file], file.name, {
+      type: inferredMimeType,
+      lastModified: file.lastModified
+    });
+  }
+
+  return file;
+}
+
 export function TripDayEditor({
   tripId,
   day,
@@ -557,14 +695,42 @@ export function TripDayEditor({
       throw new Error('Photos must be 10 MB or smaller.');
     }
 
+    let normalizedFile = file;
+    let usedOriginalAfterConversionFailure = false;
+    try {
+      normalizedFile = await normalizePhotoForUpload(file);
+    } catch (conversionError) {
+      console.error('[photo upload] conversion failed', conversionError);
+      // Client-side conversion can fail on some browsers/devices; let the server-side
+      // fallback attempt conversion before surfacing an error to the user.
+      normalizedFile = file;
+      usedOriginalAfterConversionFailure = true;
+    }
+
+    if (normalizedFile.size > maxSize) {
+      if (normalizedFile !== file) {
+        console.warn('[photo upload] converted file exceeded max size, falling back to original', {
+          originalSize: file.size,
+          convertedSize: normalizedFile.size
+        });
+        normalizedFile = file;
+      } else {
+        throw new Error('Converted photo exceeds 10 MB. Please choose a smaller image.');
+      }
+    }
+
     console.log('[photo upload] start', {
-      name: file.name,
-      type: file.type,
-      size: file.size
+      originalName: file.name,
+      originalType: file.type,
+      originalSize: file.size,
+      normalizedName: normalizedFile.name,
+      normalizedType: normalizedFile.type,
+      normalizedSize: normalizedFile.size,
+      usedOriginalAfterConversionFailure
     });
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', normalizedFile);
     formData.append('tripId', tripId);
     formData.append('tripDayId', day.id);
 

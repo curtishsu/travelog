@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { NextRequest } from 'next/server';
 import sharp from 'sharp';
+import heicConvert from 'heic-convert';
 
 import { badRequest, created, serverError, unauthorized } from '@/lib/http';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
@@ -11,6 +12,81 @@ type TripRow = Database['public']['Tables']['trips']['Row'];
 type PhotoRow = Database['public']['Tables']['photos']['Row'];
 
 export const runtime = 'nodejs';
+
+const HEIC_BRANDS = new Set([
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'heim',
+  'heis',
+  'hevm',
+  'mif1',
+  'msf1'
+]);
+
+function isLikelyHeic(inputBuffer: Buffer, file: File) {
+  const lowerName = file.name.toLowerCase();
+  if (
+    lowerName.endsWith('.heic') ||
+    lowerName.endsWith('.heif') ||
+    file.type === 'image/heic' ||
+    file.type === 'image/heif'
+  ) {
+    return true;
+  }
+
+  if (inputBuffer.length < 16) {
+    return false;
+  }
+
+  const boxType = inputBuffer.subarray(4, 8).toString('ascii').toLowerCase();
+  if (boxType !== 'ftyp') {
+    return false;
+  }
+
+  const majorBrand = inputBuffer.subarray(8, 12).toString('ascii').toLowerCase();
+  if (HEIC_BRANDS.has(majorBrand)) {
+    return true;
+  }
+
+  for (let offset = 16; offset + 4 <= Math.min(inputBuffer.length, 64); offset += 4) {
+    const brand = inputBuffer.subarray(offset, offset + 4).toString('ascii').toLowerCase();
+    if (HEIC_BRANDS.has(brand)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function convertHeicBufferToJpeg(inputBuffer: Buffer) {
+  const converted = await heicConvert({
+    buffer: inputBuffer,
+    format: 'JPEG',
+    quality: 0.9
+  });
+  return Buffer.isBuffer(converted) ? converted : Buffer.from(converted);
+}
+
+async function processImageBuffers(sourceBuffer: Buffer) {
+  const processor = sharp(sourceBuffer, { failOn: 'none' }).rotate();
+  const fullProcessor = processor
+    .clone()
+    .resize(2560, 2560, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 85 });
+  const thumbnailProcessor = processor
+    .clone()
+    .resize(400, 400, { fit: 'cover', position: 'centre', withoutEnlargement: true })
+    .jpeg({ quality: 75 });
+
+  const [{ data: fullBuffer, info: fullInfo }, thumbnailBuffer] = await Promise.all([
+    fullProcessor.toBuffer({ resolveWithObject: true }),
+    thumbnailProcessor.toBuffer()
+  ]);
+
+  return { fullBuffer, fullInfo, thumbnailBuffer };
+}
 
 export async function POST(request: NextRequest) {
   const requestStart = Date.now();
@@ -89,20 +165,45 @@ export async function POST(request: NextRequest) {
     timings.readInputBufferMs = Date.now() - readInputBufferStart;
 
     const imageProcessingStart = Date.now();
-    const processor = sharp(inputBuffer, { failOn: 'none' }).rotate();
-    const fullProcessor = processor
-      .clone()
-      .resize(2560, 2560, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85 });
-    const thumbnailProcessor = processor
-      .clone()
-      .resize(400, 400, { fit: 'cover', position: 'centre', withoutEnlargement: true })
-      .jpeg({ quality: 75 });
+    const likelyHeic = isLikelyHeic(inputBuffer, file);
+    let processingBuffer = inputBuffer;
+    let wasConvertedFromHeic = false;
 
-    const [{ data: fullBuffer, info: fullInfo }, thumbnailBuffer] = await Promise.all([
-      fullProcessor.toBuffer({ resolveWithObject: true }),
-      thumbnailProcessor.toBuffer()
-    ]);
+    if (likelyHeic) {
+      const heicConvertStart = Date.now();
+      processingBuffer = await convertHeicBufferToJpeg(inputBuffer);
+      wasConvertedFromHeic = true;
+      timings.heicConvertMs = Date.now() - heicConvertStart;
+    }
+
+    let fullBuffer: Buffer;
+    let fullInfo: sharp.OutputInfo;
+    let thumbnailBuffer: Buffer;
+
+    try {
+      const processed = await processImageBuffers(processingBuffer);
+      fullBuffer = processed.fullBuffer;
+      fullInfo = processed.fullInfo;
+      thumbnailBuffer = processed.thumbnailBuffer;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isUnsupportedFormat = /unsupported image format/i.test(message);
+
+      if (!wasConvertedFromHeic && isUnsupportedFormat) {
+        const heicConvertStart = Date.now();
+        processingBuffer = await convertHeicBufferToJpeg(inputBuffer);
+        wasConvertedFromHeic = true;
+        timings.heicConvertMs = Date.now() - heicConvertStart;
+
+        const processed = await processImageBuffers(processingBuffer);
+        fullBuffer = processed.fullBuffer;
+        fullInfo = processed.fullInfo;
+        thumbnailBuffer = processed.thumbnailBuffer;
+      } else {
+        throw error;
+      }
+    }
+
     timings.imageProcessingMs = Date.now() - imageProcessingStart;
 
     const width = fullInfo.width ?? null;
@@ -172,6 +273,7 @@ export async function POST(request: NextRequest) {
       photoId,
       fileType: file.type,
       fileSize: file.size,
+      wasConvertedFromHeic,
       timings
     });
 
