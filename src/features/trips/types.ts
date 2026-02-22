@@ -44,11 +44,13 @@ export type TripDay = Tables<'trip_days'>;
 export type TripLocation = Tables<'trip_locations'>;
 export type TripPhoto = Tables<'photos'>;
 export type TripDayHashtag = Tables<'trip_day_hashtags'>;
+export type TripDayParagraph = Tables<'trip_day_paragraphs'>;
 
 export type TripDayWithRelations = TripDay & {
   trip_locations: TripLocation[];
   photos: TripPhoto[];
   trip_day_hashtags: TripDayHashtag[];
+  trip_day_paragraphs: TripDayParagraph[];
 };
 
 export type TripDetail = Tables<'trips'> & {

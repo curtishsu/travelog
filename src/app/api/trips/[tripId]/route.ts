@@ -27,6 +27,7 @@ type TripWithRelations = Database['public']['Tables']['trips']['Row'] & {
       trip_locations: Database['public']['Tables']['trip_locations']['Row'][];
       photos: Database['public']['Tables']['photos']['Row'][];
       trip_day_hashtags: Database['public']['Tables']['trip_day_hashtags']['Row'][];
+          trip_day_paragraphs: Database['public']['Tables']['trip_day_paragraphs']['Row'][];
     }
   >;
   trip_group: TripGroupWithMembers | null;
@@ -68,7 +69,8 @@ export async function GET(_: NextRequest, context: { params: { tripId: string } 
           *,
           trip_locations(*),
           photos(*),
-          trip_day_hashtags(*)
+          trip_day_hashtags(*),
+          trip_day_paragraphs(*)
         ),
         trip_group:trip_groups!trips_trip_group_id_fkey(
           *,
@@ -550,7 +552,8 @@ async function getTripWithRelations(
           *,
           trip_locations(*),
           photos(*),
-          trip_day_hashtags(*)
+          trip_day_hashtags(*),
+          trip_day_paragraphs(*)
         ),
         trip_group:trip_groups!trips_trip_group_id_fkey(
           *,

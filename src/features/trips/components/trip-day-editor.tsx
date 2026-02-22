@@ -17,6 +17,10 @@ import type { TripDayWithRelations, TripPhoto, TripDetail } from '@/features/tri
 import { formatDateForDisplay } from '@/lib/date';
 import { PhotoGallery } from '@/features/photos/components/photo-gallery';
 import { TripDayFavoriteButton } from '@/features/trips/components/trip-day-favorite-button';
+import {
+  splitJournalEntryToParagraphs,
+  normalizeServerParagraphs
+} from '@/features/trips/components/journal-paragraph-editor';
 
 type TripDayEditorProps = {
   tripId: string;
@@ -37,6 +41,167 @@ function areHashtagsEqual(a: string[], b: string[]) {
 function areStringArraysEqual(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
   return a.every((value, index) => value === b[index]);
+}
+
+function areParagraphsEqual(
+  a: Array<{ id: string; text: string; isStory: boolean }>,
+  b: Array<{ id: string; text: string; isStory: boolean }>
+) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every(
+    (paragraph, index) =>
+      paragraph.id === b[index]?.id &&
+      paragraph.text === b[index]?.text &&
+      paragraph.isStory === b[index]?.isStory
+  );
+}
+
+function hasStoryCommandPrefix(text: string) {
+  return /^\s*(\/story|\[story\])\s+/i.test(text);
+}
+
+function stripStoryCommandPrefix(text: string) {
+  return text.replace(/^(\s*)(\/story|\[story\])\s+/i, '$1');
+}
+
+function reconcileParagraphsFromJournal(
+  previousParagraphs: Array<{ id: string; text: string; isStory: boolean }>,
+  journalEntry: string
+) {
+  const nextTexts = splitJournalEntryToParagraphs(journalEntry).map((paragraph) => paragraph.text);
+  if (!nextTexts.length) {
+    return [];
+  }
+
+  const previous = previousParagraphs;
+  const next: Array<{ id: string; text: string; isStory: boolean }> = [];
+  let previousIndex = 0;
+  let nextIndex = 0;
+
+  while (nextIndex < nextTexts.length) {
+    const nextText = nextTexts[nextIndex];
+    const normalizedNextText = stripStoryCommandPrefix(nextText);
+    const currentPrevious = previous[previousIndex];
+    const nextPrevious = previous[previousIndex + 1];
+
+    if (currentPrevious && normalizedNextText === currentPrevious.text) {
+      next.push({
+        ...currentPrevious,
+        isStory: currentPrevious.isStory || hasStoryCommandPrefix(nextText)
+      });
+      previousIndex += 1;
+      nextIndex += 1;
+      continue;
+    }
+
+    if (
+      currentPrevious &&
+      nextPrevious &&
+      normalizedNextText === `${currentPrevious.text}${nextPrevious.text}`
+    ) {
+      const mergedHasStoryPrefix = hasStoryCommandPrefix(nextText);
+      next.push({
+        id: currentPrevious.id,
+        text: normalizedNextText,
+        isStory: mergedHasStoryPrefix || currentPrevious.isStory || nextPrevious.isStory
+      });
+      previousIndex += 2;
+      nextIndex += 1;
+      continue;
+    }
+
+    if (
+      currentPrevious &&
+      nextIndex + 1 < nextTexts.length &&
+      currentPrevious.text ===
+        `${stripStoryCommandPrefix(nextText)}${stripStoryCommandPrefix(nextTexts[nextIndex + 1])}`
+    ) {
+      next.push({
+        id: currentPrevious.id,
+        text: stripStoryCommandPrefix(nextText),
+        isStory: hasStoryCommandPrefix(nextText)
+          ? true
+          : hasStoryCommandPrefix(currentPrevious.text)
+          ? false
+          : currentPrevious.isStory
+      });
+      next.push({
+        id: crypto.randomUUID(),
+        text: stripStoryCommandPrefix(nextTexts[nextIndex + 1]),
+        isStory: hasStoryCommandPrefix(nextTexts[nextIndex + 1])
+      });
+      previousIndex += 1;
+      nextIndex += 2;
+      continue;
+    }
+
+    if (currentPrevious) {
+      next.push({
+        id: currentPrevious.id,
+        text: normalizedNextText,
+        isStory: hasStoryCommandPrefix(nextText)
+          ? true
+          : hasStoryCommandPrefix(currentPrevious.text)
+          ? false
+          : currentPrevious.isStory
+      });
+      previousIndex += 1;
+      nextIndex += 1;
+      continue;
+    }
+
+    next.push({
+      id: crypto.randomUUID(),
+      text: normalizedNextText,
+      isStory: hasStoryCommandPrefix(nextText)
+    });
+    nextIndex += 1;
+  }
+
+  return next;
+}
+
+function getParagraphIndexFromSelectionStart(journalEntry: string, selectionStart: number) {
+  const normalized = journalEntry.replace(/\r\n/g, '\n');
+  if (!normalized.trim()) {
+    return null;
+  }
+  const beforeSelection = normalized.slice(0, selectionStart);
+  return beforeSelection.split(/\n{2,}/).length - 1;
+}
+
+function getParagraphStartOffsets(journalEntry: string) {
+  const text = journalEntry.replace(/\r\n/g, '\n');
+  const offsets: number[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    while (cursor < text.length && text[cursor] === '\n') {
+      cursor += 1;
+    }
+    if (cursor >= text.length) {
+      break;
+    }
+    offsets.push(cursor);
+
+    let separatorIndex = text.indexOf('\n\n', cursor);
+    while (separatorIndex !== -1 && separatorIndex + 2 < text.length && text[separatorIndex + 2] === '\n') {
+      separatorIndex += 1;
+    }
+
+    if (separatorIndex === -1) {
+      break;
+    }
+
+    cursor = separatorIndex + 2;
+    while (cursor < text.length && text[cursor] === '\n') {
+      cursor += 1;
+    }
+  }
+
+  return offsets;
 }
 
 function createSearchId() {
@@ -193,6 +358,10 @@ export function TripDayEditor({
   isTripLocked
 }: TripDayEditorProps) {
   const initialHighlight = day.highlight ?? '';
+  const initialParagraphs = useMemo(
+    () => normalizeServerParagraphs(day.trip_day_paragraphs, day.journal_entry),
+    [day.trip_day_paragraphs, day.journal_entry]
+  );
   const initialJournal = day.journal_entry ?? '';
   const initialHashtags = useMemo(
     () => (day.trip_day_hashtags ?? []).map((tag) => tag.hashtag),
@@ -201,11 +370,16 @@ export function TripDayEditor({
 
   const [highlight, setHighlight] = useState(initialHighlight);
   const [journalEntry, setJournalEntry] = useState(initialJournal);
+  const [paragraphs, setParagraphs] = useState(initialParagraphs);
   const [hashtags, setHashtags] = useState<string[]>(initialHashtags);
   const [hashtagDraft, setHashtagDraft] = useState('');
   const [removedLocationIds, setRemovedLocationIds] = useState<string[]>([]);
   const [pendingLocationsToAdd, setPendingLocationsToAdd] = useState<LocationInput[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [storyActionParagraphIndex, setStoryActionParagraphIndex] = useState<number | null>(null);
+  const [storyTooltipPosition, setStoryTooltipPosition] = useState<{ left: number; top: number } | null>(
+    null
+  );
   const [isDayLocked, setIsDayLocked] = useState(day.is_locked ?? false);
   const [lockError, setLockError] = useState<string | null>(null);
   const [showHighlightPreview, setShowHighlightPreview] = useState(false);
@@ -216,6 +390,7 @@ export function TripDayEditor({
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const journalFieldRef = useRef<HTMLDivElement | null>(null);
   const [initialPhotoIds, setInitialPhotoIds] = useState<string[]>(
     () => [...(day.photos ?? []).map((photo) => photo.id)].sort()
   );
@@ -254,6 +429,7 @@ export function TripDayEditor({
   useEffect(() => {
     setHighlight(initialHighlight);
     setJournalEntry(initialJournal);
+    setParagraphs(initialParagraphs);
     setHashtags(initialHashtags);
     setRemovedLocationIds([]);
     setPendingLocationsToAdd([]);
@@ -261,7 +437,9 @@ export function TripDayEditor({
     setIsDayLocked(day.is_locked ?? false);
     setLockError(null);
     setInitialPhotoIds([...(day.photos ?? []).map((photo) => photo.id)].sort());
-  }, [initialHighlight, initialJournal, initialHashtags, day.id, day.is_locked]);
+    setStoryActionParagraphIndex(null);
+    setStoryTooltipPosition(null);
+  }, [initialHighlight, initialJournal, initialParagraphs, initialHashtags, day.id, day.is_locked]);
 
   const locations = useMemo(() => {
     const existing = (day.trip_locations ?? []).filter((location) => !removedLocationIds.includes(location.id));
@@ -562,6 +740,7 @@ export function TripDayEditor({
   const hasChanges =
     highlight !== initialHighlight ||
     journalEntry !== initialJournal ||
+    !areParagraphsEqual(paragraphs, initialParagraphs) ||
     !areHashtagsEqual(hashtags, initialHashtags) ||
     removedLocationIds.length > 0 ||
     pendingLocationsToAdd.length > 0 ||
@@ -569,6 +748,65 @@ export function TripDayEditor({
   const effectiveIsLocked = isTripLocked || isDayLocked;
   const deferredHighlight = useDeferredValue(highlight);
   const deferredJournalEntry = useDeferredValue(journalEntry);
+  const storyActionParagraph =
+    storyActionParagraphIndex === null
+      ? null
+      : paragraphs[Math.min(Math.max(storyActionParagraphIndex, 0), paragraphs.length - 1)] ?? null;
+
+  function getStoryTooltipPosition(textarea: HTMLTextAreaElement, paragraphIndex: number) {
+    const containerRect = journalFieldRef.current?.getBoundingClientRect();
+    if (!containerRect) {
+      return null;
+    }
+
+    const starts = getParagraphStartOffsets(textarea.value);
+    const clampedIndex = Math.min(Math.max(paragraphIndex, 0), Math.max(starts.length - 1, 0));
+    const paragraphStart = starts[clampedIndex] ?? 0;
+    const lineNumber = textarea.value.slice(0, paragraphStart).split('\n').length - 1;
+    const style = window.getComputedStyle(textarea);
+    const lineHeight = Number.parseFloat(style.lineHeight) || 20;
+    const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+    const top = Math.max(8, paddingTop + lineNumber * lineHeight - textarea.scrollTop);
+
+    return {
+      left: containerRect.width / 2,
+      top
+    };
+  }
+
+  function updateStoryActionFromSelection(
+    textarea: HTMLTextAreaElement,
+    requireRangeSelection: boolean,
+    clientPoint?: { x: number; y: number }
+  ) {
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    if (requireRangeSelection && start === end) {
+      setStoryActionParagraphIndex(null);
+      setStoryTooltipPosition(null);
+      return;
+    }
+    const nextIndex = getParagraphIndexFromSelectionStart(textarea.value, start);
+    setStoryActionParagraphIndex(nextIndex);
+    if (nextIndex === null) {
+      setStoryTooltipPosition(null);
+      return;
+    }
+
+    const positioned = getStoryTooltipPosition(textarea, nextIndex);
+    if (positioned) {
+      setStoryTooltipPosition(positioned);
+      return;
+    }
+
+    const containerRect = journalFieldRef.current?.getBoundingClientRect();
+    if (containerRect && clientPoint) {
+      setStoryTooltipPosition({
+        left: containerRect.width / 2,
+        top: Math.max(8, clientPoint.y - containerRect.top - 8)
+      });
+    }
+  }
 
   async function handleToggleDayLock() {
     if (isTripLocked) {
@@ -618,6 +856,11 @@ export function TripDayEditor({
         payload: {
           highlight,
           journalEntry,
+          paragraphs: paragraphs.map((paragraph) => ({
+            id: paragraph.id,
+            text: paragraph.text,
+            isStory: paragraph.isStory
+          })),
           hashtags,
           locationsToAdd: pendingLocationsToAdd.length ? pendingLocationsToAdd : undefined,
           locationIdsToRemove: removedLocationIds.length ? removedLocationIds : undefined
@@ -626,12 +869,15 @@ export function TripDayEditor({
 
       setHighlight(result.highlight ?? '');
       setJournalEntry(result.journal_entry ?? '');
+      setParagraphs(normalizeServerParagraphs(result.trip_day_paragraphs, result.journal_entry));
       setHashtags(result.trip_day_hashtags.map((tag) => tag.hashtag));
       setRemovedLocationIds([]);
       setPendingLocationsToAdd([]);
       setInitialPhotoIds(currentPhotoIds);
       setFeedback('Day saved.');
       setIsDayLocked(result.is_locked ?? isDayLocked);
+      setStoryActionParagraphIndex(null);
+      setStoryTooltipPosition(null);
 
       if (shouldNavigateAfterSave) {
         onNavigateToNext();
@@ -1062,14 +1308,77 @@ export function TripDayEditor({
               {showJournalPreview ? 'Hide preview' : 'Show preview'}
             </button>
           </div>
-          <textarea
-            value={journalEntry}
-            onChange={(event) => setJournalEntry(event.target.value)}
-            rows={6}
-            maxLength={7000}
-            className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
-            placeholder="Write everything you want to remember."
-          />
+          <div ref={journalFieldRef} className="relative">
+            <textarea
+              value={journalEntry}
+              onChange={(event) => {
+                const nextJournalEntry = event.target.value;
+                setJournalEntry(nextJournalEntry);
+                setParagraphs((prev) => reconcileParagraphsFromJournal(prev, nextJournalEntry));
+                setStoryActionParagraphIndex(null);
+                setStoryTooltipPosition(null);
+              }}
+              onMouseUp={(event) =>
+                updateStoryActionFromSelection(event.currentTarget, true, {
+                  x: event.clientX,
+                  y: event.clientY
+                })
+              }
+              onKeyUp={(event) => {
+                if (event.key === 'Shift' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                  updateStoryActionFromSelection(event.currentTarget, true);
+                }
+              }}
+              onTouchEnd={(event) => {
+                const touch = event.changedTouches[0];
+                updateStoryActionFromSelection(
+                  event.currentTarget,
+                  false,
+                  touch ? { x: touch.clientX, y: touch.clientY } : undefined
+                );
+              }}
+              onScroll={(event) => {
+                if (storyActionParagraphIndex === null) {
+                  return;
+                }
+                const positioned = getStoryTooltipPosition(event.currentTarget, storyActionParagraphIndex);
+                if (positioned) {
+                  setStoryTooltipPosition(positioned);
+                }
+              }}
+              onBlur={() => {
+                setStoryActionParagraphIndex(null);
+                setStoryTooltipPosition(null);
+              }}
+              rows={6}
+              maxLength={7000}
+              className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+              placeholder="Write everything you want to remember."
+            />
+            {storyActionParagraph && storyTooltipPosition ? (
+              <div
+                className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 shadow-lg"
+                style={{ left: storyTooltipPosition.left, top: storyTooltipPosition.top }}
+              >
+                <button
+                  type="button"
+                  className="pointer-events-auto text-xs font-medium text-white underline-offset-4 transition hover:underline"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setParagraphs((prev) =>
+                      prev.map((item) =>
+                        item.id === storyActionParagraph.id ? { ...item, isStory: !item.isStory } : item
+                      )
+                    );
+                    setStoryActionParagraphIndex(null);
+                    setStoryTooltipPosition(null);
+                  }}
+                >
+                  {storyActionParagraph.isStory ? 'Unmark' : 'Mark as Story'}
+                </button>
+              </div>
+            ) : null}
+          </div>
           <p className="text-xs text-slate-500">{7000 - journalEntry.length} characters left</p>
           {showJournalPreview ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">

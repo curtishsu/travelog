@@ -97,6 +97,27 @@ export type Database = {
         };
         Update: Partial<Database['public']['Tables']['trip_days']['Insert']>;
       };
+      trip_day_paragraphs: {
+        Row: {
+          id: string;
+          trip_day_id: string;
+          position: number;
+          text: string;
+          is_story: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          trip_day_id: string;
+          position: number;
+          text: string;
+          is_story?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['trip_day_paragraphs']['Insert']>;
+      };
       trip_locations: {
         Row: {
           id: string;

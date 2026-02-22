@@ -25,9 +25,14 @@ export function SignUpForm() {
       return;
     }
     setIsSubmitting(true);
+    const emailRedirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}/auth/callback?next=/journal` : undefined;
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
-      password
+      password,
+      options: {
+        emailRedirectTo
+      }
     });
     setIsSubmitting(false);
     if (signUpError) {

@@ -1,3 +1,6 @@
+'use client';
+
+import { useMemo } from 'react';
 import { Hash, MapPin } from 'lucide-react';
 
 import { PhotoGallery } from '@/features/photos/components/photo-gallery';
@@ -11,6 +14,14 @@ type TripDaySectionProps = {
   guestModeEnabled: boolean;
   isTripLocked: boolean;
 };
+
+function hasStoryCommandPrefix(text: string) {
+  return /^\s*\/story\b[ .]*/i.test(text);
+}
+
+function stripStoryCommandPrefix(text: string) {
+  return text.replace(/^(\s*)\/story\b[ .]*/i, '$1');
+}
 
 function renderLocations(day: TripDayWithRelations) {
   if (!day.trip_locations?.length) {
@@ -45,8 +56,30 @@ function renderHashtags(day: TripDayWithRelations) {
 }
 
 export function TripDaySection({ day, guestModeEnabled, isTripLocked }: TripDaySectionProps) {
+  const paragraphs = useMemo(() => {
+    if (day.trip_day_paragraphs?.length) {
+      return [...day.trip_day_paragraphs]
+        .sort((a, b) => a.position - b.position)
+        .map((paragraph) => ({
+          id: paragraph.id,
+          text: stripStoryCommandPrefix(paragraph.text),
+          isStory: paragraph.is_story || hasStoryCommandPrefix(paragraph.text)
+        }));
+    }
+
+    return (day.journal_entry ?? '')
+      .split(/\n{2,}/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map((text, index) => ({
+        id: `legacy-${day.id}-${index}`,
+        text: stripStoryCommandPrefix(text),
+        isStory: hasStoryCommandPrefix(text)
+      }));
+  }, [day.id, day.journal_entry, day.trip_day_paragraphs]);
+
   const hasHighlight = Boolean(day.highlight?.trim());
-  const hasJournal = Boolean(day.journal_entry?.trim());
+  const hasJournal = paragraphs.length > 0;
   const hasContent =
     hasHighlight ||
     hasJournal ||
@@ -91,7 +124,17 @@ export function TripDaySection({ day, guestModeEnabled, isTripLocked }: TripDayS
           {!isDayMasked && hasJournal ? (
             <div>
               <p className="font-semibold text-slate-100">Journal</p>
-              <MinimalMarkdown value={day.journal_entry ?? ''} className="mt-1" />
+              <div className="mt-2 space-y-3">
+                {paragraphs.map((paragraph) => (
+                  <div
+                    key={paragraph.id}
+                    id={`story-paragraph-${paragraph.id}`}
+                    className="rounded-xl bg-transparent px-3 py-2 transition"
+                  >
+                    <MinimalMarkdown value={paragraph.text} className="mt-1" />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
           {renderHashtags(day)}

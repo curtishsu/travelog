@@ -9,10 +9,37 @@ type TripDayRow = Database['public']['Tables']['trip_days']['Row'];
 type TripRow = Database['public']['Tables']['trips']['Row'];
 type TripLocationRow = Database['public']['Tables']['trip_locations']['Row'];
 type PhotoRow = Database['public']['Tables']['photos']['Row'];
+type TripDayParagraphRow = Database['public']['Tables']['trip_day_paragraphs']['Row'];
 type TripLocationInsert = Database['public']['Tables']['trip_locations']['Insert'];
 type TripDayHashtagInsert = Database['public']['Tables']['trip_day_hashtags']['Insert'];
+type TripDayParagraphInsert = Database['public']['Tables']['trip_day_paragraphs']['Insert'];
+type IncomingParagraph = { id?: string; text: string; isStory: boolean };
 
 type Params = { params: { tripId: string; dayIndex: string } };
+
+function splitJournalIntoParagraphs(journalEntry: string | null | undefined): string[] {
+  if (!journalEntry?.trim()) {
+    return [];
+  }
+
+  return journalEntry
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function hasStoryCommandPrefix(text: string): boolean {
+  return /^\s*(\/story|\[story\])\s+/i.test(text);
+}
+
+function stripStoryCommandPrefix(text: string): string {
+  return text.replace(/^(\s*)(\/story|\[story\])\s+/i, '$1');
+}
+
+function buildJournalFromParagraphs(paragraphs: Array<{ text: string }>): string {
+  return paragraphs.map((paragraph) => paragraph.text).join('\n\n');
+}
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { tripId, dayIndex } = params;
@@ -44,7 +71,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         *,
         trip_locations(*),
         photos(*),
-        trip_day_hashtags(*)
+        trip_day_hashtags(*),
+        trip_day_paragraphs(*)
       `
     )
     .eq('trip_id', tripId)
@@ -53,6 +81,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       trip_locations: TripLocationRow[];
       photos: PhotoRow[];
       trip_day_hashtags: Database['public']['Tables']['trip_day_hashtags']['Row'][];
+      trip_day_paragraphs: TripDayParagraphRow[];
     }>();
 
   if (dayError || !tripDay) {
@@ -75,7 +104,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     updates.highlight = parseResult.data.highlight;
   }
 
-  if (parseResult.data.journalEntry !== undefined) {
+  const incomingParagraphs: IncomingParagraph[] | undefined =
+    parseResult.data.paragraphs !== undefined
+      ? parseResult.data.paragraphs.map((paragraph) => ({
+          id: paragraph.id,
+          text: stripStoryCommandPrefix(paragraph.text.replace(/\r\n/g, '\n')),
+          isStory: (paragraph.isStory ?? false) || hasStoryCommandPrefix(paragraph.text)
+        }))
+      : parseResult.data.journalEntry !== undefined
+      ? splitJournalIntoParagraphs(parseResult.data.journalEntry).map((text) => ({
+          text: stripStoryCommandPrefix(text),
+          isStory: hasStoryCommandPrefix(text)
+        }))
+      : undefined;
+
+  if (incomingParagraphs !== undefined) {
+    updates.journal_entry = buildJournalFromParagraphs(incomingParagraphs);
+  } else if (parseResult.data.journalEntry !== undefined) {
     updates.journal_entry = parseResult.data.journalEntry;
   }
 
@@ -96,6 +141,31 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         .eq('id', tripDay.id);
       if (updateError) {
         throw updateError;
+      }
+    }
+
+    if (incomingParagraphs !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tripDayParagraphsTable = supabase.from('trip_day_paragraphs') as any;
+      const { error: deleteParagraphsError } = await tripDayParagraphsTable
+        .delete()
+        .eq('trip_day_id', tripDay.id);
+      if (deleteParagraphsError) {
+        throw deleteParagraphsError;
+      }
+
+      if (incomingParagraphs.length) {
+        const paragraphRows: TripDayParagraphInsert[] = incomingParagraphs.map((paragraph, index) => ({
+          id: paragraph.id,
+          trip_day_id: tripDay.id,
+          position: index + 1,
+          text: paragraph.text,
+          is_story: paragraph.isStory
+        }));
+        const { error: insertParagraphsError } = await tripDayParagraphsTable.insert(paragraphRows);
+        if (insertParagraphsError) {
+          throw insertParagraphsError;
+        }
       }
     }
 
@@ -156,7 +226,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           *,
           trip_locations(*),
           photos(*),
-          trip_day_hashtags(*)
+          trip_day_hashtags(*),
+          trip_day_paragraphs(*)
         `
       )
       .eq('id', tripDay.id)
@@ -167,6 +238,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           trip_locations: TripLocationRow[];
           photos: PhotoRow[];
           trip_day_hashtags: Database['public']['Tables']['trip_day_hashtags']['Row'][];
+          trip_day_paragraphs: TripDayParagraphRow[];
         })
       | null;
 

@@ -1,5 +1,6 @@
 import { TripDetailActions } from '@/features/trips/components/trip-detail-actions';
 import { TripDaySection } from '@/features/trips/components/trip-day-section';
+import { TripStoriesCarousel } from '@/features/trips/components/trip-stories-carousel';
 import type { TripDetail } from '@/features/trips/types';
 import { formatDateRange } from '@/lib/date';
 import { MinimalMarkdown } from '@/components/ui/minimal-markdown';
@@ -77,6 +78,11 @@ export function TripDetailView({ trip, guestModeEnabled }: TripDetailViewProps) 
           <p className="text-sm text-slate-500">No trip types logged yet.</p>
         )}
       </header>
+      <TripStoriesCarousel
+        days={trip.trip_days}
+        guestModeEnabled={guestModeEnabled}
+        isTripLocked={isTripLocked}
+      />
       <main className="space-y-5">
         {trip.trip_days.map((day) => (
           <TripDaySection

@@ -36,7 +36,8 @@ export async function loadTripDetail(tripId: string): Promise<TripDetailResult> 
           *,
           trip_locations(*),
           photos(*),
-          trip_day_hashtags(*)
+          trip_day_hashtags(*),
+          trip_day_paragraphs(*)
         ),
         trip_group:trip_groups!trips_trip_group_id_fkey(
           *,
