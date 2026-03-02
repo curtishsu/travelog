@@ -150,6 +150,10 @@ export async function PATCH(request: NextRequest, context: { params: { tripId: s
     updates.reflection = parseResult.data.reflection;
   }
 
+  if (parseResult.data.timezone !== undefined) {
+    updates.timezone = parseResult.data.timezone;
+  }
+
   if (parseResult.data.isTripContentLocked !== undefined) {
     updates.is_trip_content_locked = parseResult.data.isTripContentLocked;
   }

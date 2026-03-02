@@ -12,6 +12,7 @@ export type TripOverviewPayload = {
   name: string;
   startDate: string;
   endDate: string;
+  timezone?: string | null;
   links: TripLinkInput[];
   tripTypes: string[];
   reflection?: string | null;
@@ -27,6 +28,15 @@ export type TripUpdatePayload = Partial<Omit<TripOverviewPayload, 'links' | 'tri
   isTripContentLocked?: boolean;
   isReflectionLocked?: boolean;
 };
+
+function getBrowserTimeZone() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export type LocationInput = {
   displayName: string;
@@ -161,6 +171,7 @@ export async function createTrip(
       name: payload.name,
       startDate: payload.startDate,
       endDate: payload.endDate,
+      timezone: payload.timezone ?? getBrowserTimeZone(),
       links: payload.links,
       tripTypes: payload.tripTypes,
       tripGroupId: payload.tripGroupId ?? null,

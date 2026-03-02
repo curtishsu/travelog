@@ -1,5 +1,22 @@
 import { z } from 'zod';
 
+import { normalizeTimeZone } from '@/lib/timezone';
+
+const tripTimeZoneSchema = z
+  .union([
+    z.null(),
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(120)
+      .refine((value) => normalizeTimeZone(value) !== null, {
+        message: 'timezone must be a valid IANA timezone'
+      })
+      .transform((value) => normalizeTimeZone(value)!)
+  ])
+  .optional();
+
 export const tripLinkSchema = z.object({
   label: z.string().trim().min(1).max(120),
   url: z.string().trim().url()
@@ -23,7 +40,8 @@ export const tripCreateSchema = z
     tripGroupId: z.string().uuid().optional().nullable(),
     // New companions model (Option A): store selected group ids + person ids.
     companionGroupIds: z.array(z.string().uuid()).max(50).optional().default([]),
-    companionPersonIds: z.array(z.string().uuid()).max(200).optional().default([])
+    companionPersonIds: z.array(z.string().uuid()).max(200).optional().default([]),
+    timezone: tripTimeZoneSchema
   })
   .transform((data) => ({
     ...data,
@@ -44,6 +62,7 @@ export const tripUpdateSchema = z
     tripGroupId: z.string().uuid().nullable().optional(),
     companionGroupIds: z.array(z.string().uuid()).max(50).optional(),
     companionPersonIds: z.array(z.string().uuid()).max(200).optional(),
+    timezone: tripTimeZoneSchema,
     isTripContentLocked: z.boolean().optional(),
     isReflectionLocked: z.boolean().optional()
   })
@@ -58,6 +77,7 @@ export const tripUpdateSchema = z
       data.tripGroupId !== undefined ||
       data.companionGroupIds !== undefined ||
       data.companionPersonIds !== undefined ||
+      data.timezone !== undefined ||
       data.isTripContentLocked !== undefined ||
       data.isReflectionLocked !== undefined,
     { message: 'No fields provided for update' }

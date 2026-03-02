@@ -27,6 +27,7 @@ export type Database = {
           id: string;
           user_id: string;
           name: string;
+          timezone: string | null;
           start_date: string;
           end_date: string;
           reflection: string | null;
@@ -41,6 +42,7 @@ export type Database = {
           id?: string;
           user_id: string;
           name: string;
+          timezone?: string | null;
           start_date: string;
           end_date: string;
           reflection?: string | null;

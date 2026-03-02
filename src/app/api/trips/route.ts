@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, unauthorized } from '@/lib/http';
 import { tripCreateSchema } from '@/lib/schemas/trips';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
 import type { RequestSupabaseClient } from '@/lib/supabase/context';
+import { normalizeTimeZone } from '@/lib/timezone';
 import type { Database } from '@/types/database';
 
 type TripDayInsert = Database['public']['Tables']['trip_days']['Insert'];
@@ -74,6 +75,10 @@ export async function POST(request: NextRequest) {
 
   const { name, startDate, endDate, links, tripTypes, tripGroupId, companionGroupIds, companionPersonIds } =
     parsedResult.data;
+  const headerTimeZone =
+    normalizeTimeZone(request.headers.get('x-time-zone')) ??
+    normalizeTimeZone(request.headers.get('x-vercel-ip-timezone'));
+  const timezone = parsedResult.data.timezone ?? headerTimeZone;
 
   const startDateISO = toISODate(startDate);
   const endDateISO = toISODate(endDate);
@@ -131,6 +136,7 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: userId,
         name,
+        timezone,
         start_date: startDateISO,
         end_date: endDateISO,
         status: 'draft',

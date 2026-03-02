@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { badRequest, ok, serverError, unauthorized } from '@/lib/http';
 import { tripDayUpdateSchema } from '@/lib/schemas/trips';
 import { getSupabaseForRequest } from '@/lib/supabase/context';
+import { inferTimeZoneFromCoordinates } from '@/lib/timezone.server';
 import type { Database } from '@/types/database';
 
 type TripDayRow = Database['public']['Tables']['trip_days']['Row'];
@@ -90,9 +91,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: owningTrip, error: tripOwnershipError } = await supabase
     .from('trips')
-    .select('user_id')
+    .select('user_id,timezone')
     .eq('id', tripId)
-    .single<Pick<TripRow, 'user_id'>>();
+    .single<Pick<TripRow, 'user_id' | 'timezone'>>();
 
   if (tripOwnershipError || owningTrip?.user_id !== userId) {
     return unauthorized();
@@ -206,6 +207,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       const { error: insertLocationsError } = await tripLocationsTable.insert(locationRows);
       if (insertLocationsError) {
         throw insertLocationsError;
+      }
+
+      if (!owningTrip.timezone) {
+        const firstAddedLocation = parseResult.data.locationsToAdd[0];
+        const inferredTimeZone = inferTimeZoneFromCoordinates(
+          firstAddedLocation.lat,
+          firstAddedLocation.lng
+        );
+        if (inferredTimeZone) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tripsTable = supabase.from('trips') as any;
+          const { error: updateTripTimeZoneError } = await tripsTable
+            .update({ timezone: inferredTimeZone })
+            .eq('id', tripId)
+            .is('timezone', null);
+          if (updateTripTimeZoneError) {
+            throw updateTripTimeZoneError;
+          }
+        }
       }
     }
 
