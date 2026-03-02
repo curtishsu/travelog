@@ -195,7 +195,6 @@ export function TripEditor({ trip, initialTab, showOverlapNotice }: TripEditorPr
         day={day}
         hasNextDay={hasNextDay}
         onNavigateToNext={() => setActiveTab(`day-${dayIndex + 1}`)}
-        onNavigateToReflection={() => setActiveTab(REFLECTION_TAB)}
         isTripLocked={isTripLocked}
       />
     );

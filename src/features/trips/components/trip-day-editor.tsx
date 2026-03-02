@@ -27,7 +27,6 @@ type TripDayEditorProps = {
   day: TripDayWithRelations;
   hasNextDay: boolean;
   onNavigateToNext: () => void;
-  onNavigateToReflection?: () => void;
   isTripLocked: boolean;
 };
 
@@ -354,7 +353,6 @@ export function TripDayEditor({
   day,
   hasNextDay,
   onNavigateToNext,
-  onNavigateToReflection,
   isTripLocked
 }: TripDayEditorProps) {
   const initialHighlight = day.highlight ?? '';
@@ -834,15 +832,12 @@ export function TripDayEditor({
     }
   }
 
-  async function handleSave() {
-    const shouldNavigateAfterSave = hasNextDay;
-    const shouldNavigateToReflection = !hasNextDay && typeof onNavigateToReflection === 'function';
+  async function handleSave(options?: { navigateToNextDay?: boolean }) {
+    const shouldNavigateAfterSave = options?.navigateToNextDay === true && hasNextDay;
 
     if (!hasChanges) {
       if (shouldNavigateAfterSave) {
         onNavigateToNext();
-      } else if (shouldNavigateToReflection) {
-        onNavigateToReflection();
       }
       return;
     }
@@ -881,8 +876,6 @@ export function TripDayEditor({
 
       if (shouldNavigateAfterSave) {
         onNavigateToNext();
-      } else if (shouldNavigateToReflection) {
-        onNavigateToReflection();
       }
     } catch (mutationError) {
       console.error(mutationError);
@@ -1486,8 +1479,15 @@ export function TripDayEditor({
       {error ? <p className="text-sm text-red-300">{error.message}</p> : null}
       {feedback ? <p className="text-sm text-emerald-300">{feedback}</p> : null}
       <div className="flex flex-wrap justify-end gap-3">
-        <Button type="button" disabled={isPending || !hasChanges} onClick={handleSave}>
-          {isPending ? 'Saving…' : 'Save day'}
+        <Button type="button" variant="secondary" disabled={isPending || !hasChanges} onClick={() => void handleSave()}>
+          {isPending ? 'Saving…' : 'Save'}
+        </Button>
+        <Button
+          type="button"
+          disabled={isPending || !hasNextDay}
+          onClick={() => void handleSave({ navigateToNextDay: true })}
+        >
+          {isPending ? 'Saving…' : 'Save Next Day'}
         </Button>
       </div>
     </div>
