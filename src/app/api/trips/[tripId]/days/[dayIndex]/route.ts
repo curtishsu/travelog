@@ -18,6 +18,31 @@ type IncomingParagraph = { id?: string; text: string; isStory: boolean };
 
 type Params = { params: { tripId: string; dayIndex: string } };
 
+function sendDebugLog(
+  runId: string,
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>
+) {
+  fetch('http://127.0.0.1:7243/ingest/721ece90-4b6e-4038-9079-cbe4287c08ae', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': '254b7b'
+    },
+    body: JSON.stringify({
+      sessionId: '254b7b',
+      runId,
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now()
+    })
+  }).catch(() => {});
+}
+
 function splitJournalIntoParagraphs(journalEntry: string | null | undefined): string[] {
   if (!journalEntry?.trim()) {
     return [];
@@ -46,13 +71,41 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const { tripId, dayIndex } = params;
   const index = Number.parseInt(dayIndex, 10);
 
+  // #region agent log
+  sendDebugLog('run1', 'H4', 'route.ts:PATCH:start', 'PATCH day update request received', {
+    method: request.method,
+    hasCookieHeader: Boolean(request.headers.get('cookie')),
+    hasAuthorizationHeader: Boolean(request.headers.get('authorization')),
+    dayIndexRaw: dayIndex,
+    dayIndexParsed: index,
+    tripIdPrefix: tripId.slice(0, 8)
+  });
+  // #endregion
+
   if (Number.isNaN(index) || index < 1) {
     return badRequest('Invalid day index.');
   }
 
-  const { supabase, user } = await getSupabaseForRequest();
+  const { supabase, user, isDemoMode, authError } = await getSupabaseForRequest();
+
+  // #region agent log
+  sendDebugLog('run1', 'H1', 'route.ts:PATCH:auth', 'Auth state resolved for PATCH', {
+    userPresent: Boolean(user?.id),
+    isDemoMode,
+    hasAuthError: Boolean(authError),
+    authErrorMessage:
+      authError && typeof authError === 'object' && 'message' in authError
+        ? String((authError as { message?: string }).message ?? '')
+        : null
+  });
+  // #endregion
 
   if (!user) {
+    // #region agent log
+    sendDebugLog('run1', 'H1', 'route.ts:PATCH:unauthorized-no-user', 'Returning unauthorized: no user', {
+      reason: 'user-null'
+    });
+    // #endregion
     return unauthorized();
   }
 
@@ -85,19 +138,59 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       trip_day_paragraphs: TripDayParagraphRow[];
     }>();
 
+  // #region agent log
+  sendDebugLog('run1', 'H2', 'route.ts:PATCH:day-query', 'Trip day lookup result', {
+    dayFound: Boolean(tripDay?.id),
+    dayErrorCode:
+      dayError && typeof dayError === 'object' && 'code' in dayError
+        ? String((dayError as { code?: string }).code ?? '')
+        : null,
+    dayErrorMessage:
+      dayError && typeof dayError === 'object' && 'message' in dayError
+        ? String((dayError as { message?: string }).message ?? '')
+        : null
+  });
+  // #endregion
+
   if (dayError || !tripDay) {
     return badRequest('Trip day not found.');
   }
 
   const { data: owningTrip, error: tripOwnershipError } = await supabase
     .from('trips')
-    .select('user_id,timezone')
+    .select('*')
     .eq('id', tripId)
-    .single<Pick<TripRow, 'user_id' | 'timezone'>>();
+    .eq('user_id', userId)
+    .maybeSingle<TripRow>();
 
-  if (tripOwnershipError || owningTrip?.user_id !== userId) {
+  // #region agent log
+  sendDebugLog('run1', 'H3', 'route.ts:PATCH:ownership-query', 'Trip ownership lookup result', {
+    ownershipMatchFound: Boolean(owningTrip),
+    hasTimezoneFieldInRow: Boolean(
+      owningTrip && Object.prototype.hasOwnProperty.call(owningTrip, 'timezone')
+    ),
+    tripOwnershipErrorCode:
+      tripOwnershipError && typeof tripOwnershipError === 'object' && 'code' in tripOwnershipError
+        ? String((tripOwnershipError as { code?: string }).code ?? '')
+        : null,
+    tripOwnershipErrorMessage:
+      tripOwnershipError && typeof tripOwnershipError === 'object' && 'message' in tripOwnershipError
+        ? String((tripOwnershipError as { message?: string }).message ?? '')
+        : null,
+    userIdPrefix: userId.slice(0, 8),
+    tripIdPrefix: tripId.slice(0, 8)
+  });
+  // #endregion
+
+  if (tripOwnershipError || !owningTrip) {
     return unauthorized();
   }
+
+  const tripTimezone =
+    typeof (owningTrip as Record<string, unknown>).timezone === 'string'
+      ? ((owningTrip as Record<string, unknown>).timezone as string)
+      : null;
+  const hasTimezoneColumn = Object.prototype.hasOwnProperty.call(owningTrip, 'timezone');
 
   const updates: Record<string, unknown> = {};
 
@@ -209,7 +302,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         throw insertLocationsError;
       }
 
-      if (!owningTrip.timezone) {
+      if (hasTimezoneColumn && !tripTimezone) {
         const firstAddedLocation = parseResult.data.locationsToAdd[0];
         const inferredTimeZone = inferTimeZoneFromCoordinates(
           firstAddedLocation.lat,
