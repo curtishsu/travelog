@@ -135,7 +135,7 @@ export function JournalTrips() {
       {isError ? (
         (error as Error & { status?: number } | null)?.status === 401 ? (
           <SignedOutTravelPrompt
-            heading="Log in to see your trips"
+            heading="Your travels, remembered"
             body="Sign in to unlock your journal and globe."
           />
         ) : (

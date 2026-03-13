@@ -105,7 +105,7 @@ export function TripsList() {
     if ((error as Error & { status?: number } | null)?.status === 401) {
       return (
         <SignedOutTravelPrompt
-          heading="Log in to see your trips"
+          heading="Your travels, remembered"
           body="Sign in to unlock your trips, globe, and stats."
         />
       );
