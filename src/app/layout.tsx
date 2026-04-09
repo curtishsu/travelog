@@ -1,14 +1,11 @@
 import './globals.css';
 
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 
 import { Header } from '@/components/layout/header';
 import { MobileNav } from '@/components/layout/mobile-nav';
 import { ReactQueryProvider } from '@/components/providers/react-query-provider';
 import { DemoAuthProvider } from '@/components/providers/demo-auth-provider';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Travelog',
@@ -33,7 +30,7 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-slate-950 text-slate-50 antialiased`}>
+      <body className="bg-slate-950 text-slate-50 antialiased">
         <DemoAuthProvider>
           <ReactQueryProvider>
             <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
@@ -49,4 +46,3 @@ export default function RootLayout({ children }: RootLayoutProps) {
     </html>
   );
 }
-

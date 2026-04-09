@@ -271,12 +271,18 @@ async function insertTripRow(
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tripsTable = supabase.from('trips') as any;
-  let insertResult = await tripsTable.insert(trip).select().single<TripRow>();
+  let insertResult = (await tripsTable.insert(trip).select().single()) as {
+    data: TripRow | null;
+    error: unknown;
+  };
 
   if (hasMissingTimezoneColumnError(insertResult.error)) {
     const { timezone: _timezone, ...tripWithoutTimezone } = trip;
     void _timezone;
-    insertResult = await tripsTable.insert(tripWithoutTimezone).select().single<TripRow>();
+    insertResult = (await tripsTable.insert(tripWithoutTimezone).select().single()) as {
+      data: TripRow | null;
+      error: unknown;
+    };
   }
 
   return insertResult;
