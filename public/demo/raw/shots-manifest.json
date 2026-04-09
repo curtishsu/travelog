@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-03-23T05:07:02.199Z",
+  "baseUrl": "https://mytravelog.vercel.app",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "shots": [
+    {
+      "order": 1,
+      "name": "journal-list-scroll",
+      "path": "/journal",
+      "notes": "Homepage journal list scroll",
+      "file": "raw/01-journal-list-scroll.webm"
+    },
+    {
+      "order": 2,
+      "name": "trip-overview-edit",
+      "path": "/trips/71684503-08f3-4274-9657-1c6676ab423b/edit?tab=overview",
+      "notes": "Trip overview edit page",
+      "file": "raw/02-trip-overview-edit.webm"
+    },
+    {
+      "order": 3,
+      "name": "trip-day1-edit",
+      "path": "/trips/71684503-08f3-4274-9657-1c6676ab423b/edit?tab=day-1",
+      "notes": "Trip day 1 edit page",
+      "file": "raw/03-trip-day1-edit.webm"
+    },
+    {
+      "order": 4,
+      "name": "globe-rotate",
+      "path": "/map",
+      "notes": "Globe view rotation",
+      "file": "raw/04-globe-rotate.webm"
+    },
+    {
+      "order": 5,
+      "name": "stats-scroll",
+      "path": "/stats",
+      "notes": "Stats dashboard scroll",
+      "file": "raw/05-stats-scroll.webm"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-03-23T04:38:53.494Z",
+  "provider": "macos",
+  "model": null,
+  "voice": "Samantha",
+  "clips": [
+    {
+      "index": 1,
+      "text": "Travelog is a simple way to remember your travels.",
+      "file": "01-travelog-is-a-simple-way-to-remember-your-travel.mp3",
+      "estimatedDurationSec": 3.71
+    },
+    {
+      "index": 2,
+      "text": "Each time you take a trip, you can record when you went, who you traveled with, and why you went.",
+      "file": "02-each-time-you-take-a-trip-you-can-record-when-yo.mp3",
+      "estimatedDurationSec": 7.94
+    },
+    {
+      "index": 3,
+      "text": "You can also log where you were each day, write about your experiences, and save memorable photos.",
+      "file": "03-you-can-also-log-where-you-were-each-day-write-a.mp3",
+      "estimatedDurationSec": 6.79
+    },
+    {
+      "index": 4,
+      "text": "Once your trips are logged, you can explore the globe to see where you have been and get ideas for where to go next.",
+      "file": "04-once-your-trips-are-logged-you-can-explore-the-g.mp3",
+      "estimatedDurationSec": 9.48
+    },
+    {
+      "index": 5,
+      "text": "You can also view key stats, like total days traveled and who you travel with most often.",
+      "file": "05-you-can-also-view-key-stats-like-total-days-trav.mp3",
+      "estimatedDurationSec": 6.79
+    }
+  ]
+}

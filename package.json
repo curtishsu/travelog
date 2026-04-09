@@ -11,6 +11,11 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
+    "demo:seed": "node scripts/seed-demo-data.mjs",
+    "demo:tts": "node scripts/generate-demo-tts.mjs",
+    "demo:capture": "node scripts/capture-demo-footage.mjs",
+    "demo:stitch": "node scripts/stitch-demo-video.mjs",
+    "demo:render": "npm run demo:tts && npm run demo:capture && npm run demo:stitch",
     "prepare": "husky install"
   },
   "dependencies": {

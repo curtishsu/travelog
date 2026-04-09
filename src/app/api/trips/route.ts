@@ -11,6 +11,7 @@ import type { Database } from '@/types/database';
 type TripDayInsert = Database['public']['Tables']['trip_days']['Insert'];
 type TripLinkInsert = Database['public']['Tables']['trip_links']['Insert'];
 type TripTypeInsert = Database['public']['Tables']['trip_types']['Insert'];
+type TripRow = Database['public']['Tables']['trips']['Row'];
 
 export async function GET() {
   const { supabase, user } = await getSupabaseForRequest();
@@ -130,20 +131,15 @@ export async function POST(request: NextRequest) {
 
     const resolvedTripGroupId = desiredGroupIds.length === 1 ? desiredGroupIds[0] : null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tripsTable = supabase.from('trips') as any;
-    const { data: insertedTrips, error: insertTripError } = await tripsTable
-      .insert({
-        user_id: userId,
-        name,
-        timezone,
-        start_date: startDateISO,
-        end_date: endDateISO,
-        status: 'draft',
-        trip_group_id: resolvedTripGroupId
-      })
-      .select()
-      .single();
+    const { data: insertedTrips, error: insertTripError } = await insertTripRow(supabase, {
+      user_id: userId,
+      name,
+      timezone,
+      start_date: startDateISO,
+      end_date: endDateISO,
+      status: 'draft',
+      trip_group_id: resolvedTripGroupId
+    });
 
     if (insertTripError || !insertedTrips) {
       if ((insertTripError as { code?: string })?.code === '23505') {
@@ -269,3 +265,29 @@ async function detectTripOverlap(
   };
 }
 
+async function insertTripRow(
+  supabase: RequestSupabaseClient,
+  trip: Database['public']['Tables']['trips']['Insert']
+) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tripsTable = supabase.from('trips') as any;
+  let insertResult = await tripsTable.insert(trip).select().single<TripRow>();
+
+  if (hasMissingTimezoneColumnError(insertResult.error)) {
+    const { timezone: _timezone, ...tripWithoutTimezone } = trip;
+    void _timezone;
+    insertResult = await tripsTable.insert(tripWithoutTimezone).select().single<TripRow>();
+  }
+
+  return insertResult;
+}
+
+function hasMissingTimezoneColumnError(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const code = 'code' in error ? String((error as { code?: string }).code ?? '') : '';
+  const message = 'message' in error ? String((error as { message?: string }).message ?? '') : '';
+  return code === 'PGRST204' && message.includes('timezone');
+}
