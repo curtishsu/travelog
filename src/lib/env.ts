@@ -6,6 +6,7 @@ export const env = createEnv({
     SUPABASE_URL: z.string().url(),
     SUPABASE_ANON_KEY: z.string(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+    CRON_SECRET: z.string().min(1).optional(),
     MAPBOX_TOKEN: z.string().optional(),
     AUTH_DISABLED: z
       .enum(['true', 'false'])
@@ -34,4 +35,3 @@ export const env = createEnv({
     NEXT_PUBLIC_DEMO_PASSWORD: process.env.NEXT_PUBLIC_DEMO_PASSWORD
   }
 });
-
