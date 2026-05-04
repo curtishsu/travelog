@@ -3,6 +3,19 @@ export type TripStatus = 'draft' | 'active' | 'completed';
 export type Database = {
   public: {
     Tables: {
+      keepalive_events: {
+        Row: {
+          id: string;
+          source: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['keepalive_events']['Insert']>;
+      };
       people: {
         Row: {
           id: string;
@@ -310,4 +323,3 @@ export type Database = {
 
 export type Tables<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Row'];
-
