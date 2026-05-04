@@ -1,6 +1,7 @@
 import { unauthorized } from '@/lib/http';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { env } from '@/lib/env';
+import type { Database } from '@/types/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,7 @@ export const revalidate = 0;
 
 const KEEPALIVE_SOURCE = 'vercel-cron';
 const KEEPALIVE_RETENTION_DAYS = 30;
+type KeepaliveEventInsert = Database['public']['Tables']['keepalive_events']['Insert'];
 
 function isAuthorized(request: Request) {
   const secret = env.CRON_SECRET;
@@ -35,9 +37,10 @@ export async function GET(request: Request) {
     const supabase = createSupabaseServiceClient();
     const checkedAt = new Date();
     const retentionCutoff = new Date(checkedAt.getTime() - KEEPALIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const { error: insertError } = await supabase.from('keepalive_events').insert({
+    const insertPayload: KeepaliveEventInsert = {
       source: KEEPALIVE_SOURCE
-    });
+    };
+    const { error: insertError } = await supabase.from('keepalive_events').insert(insertPayload as never);
 
     if (insertError) {
       throw insertError;
