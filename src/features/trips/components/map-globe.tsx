@@ -6,6 +6,7 @@ import mapboxgl from 'mapbox-gl';
 import type { Geometry, GeometryCollection } from 'geojson';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Globe2, SlidersHorizontal, X } from 'lucide-react';
+import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 
 import type { MapLocationEntry } from '@/features/trips/server';
@@ -32,6 +33,7 @@ const COUNTRY_NAME_FIELDS = ['name_en', 'name'];
 type MapboxExpression = Exclude<Parameters<mapboxgl.Map['setFilter']>[1], undefined>;
 type MapboxPaintValue = Exclude<Parameters<mapboxgl.Map['setPaintProperty']>[2], undefined>;
 type GeometryWithCoordinates = Exclude<Geometry, GeometryCollection>;
+type MapEntryPhoto = MapLocationEntry['dayPhotos'][number];
 const CITY_MARKER_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34" fill="none">
   <path
@@ -59,6 +61,7 @@ type LocationGroup = {
     dayIndex: number;
     highlight: string | null;
     hashtags: string[];
+    dayPhotos: MapEntryPhoto[];
   }>;
 };
 
@@ -81,6 +84,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
   const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [activeEntryIndex, setActiveEntryIndex] = useState(0);
+  const [lightboxPhotoIndex, setLightboxPhotoIndex] = useState<number | null>(null);
   const focusedGroupIdRef = useRef<string | null>(null);
   const selectedGroupIdRef = useRef<string | null>(null);
 
@@ -140,12 +144,33 @@ export function MapGlobe({ locations }: MapGlobeProps) {
     [groups, selectedGroupId]
   );
   const selectedEntry = selectedGroup?.entries[activeEntryIndex] ?? null;
+  const selectedPhotos = selectedEntry?.dayPhotos ?? [];
+  const lightboxPhoto = lightboxPhotoIndex !== null ? selectedPhotos[lightboxPhotoIndex] ?? null : null;
   const totalEntries = selectedGroup?.entries.length ?? 0;
   const goToPreviousEntry = () => {
     setActiveEntryIndex((prev) => Math.max(prev - 1, 0));
   };
   const goToNextEntry = () => {
     setActiveEntryIndex((prev) => Math.min(prev + 1, Math.max(totalEntries - 1, 0)));
+  };
+  const closeSelectedGroup = () => {
+    setSelectedGroupId(null);
+    selectedGroupIdRef.current = null;
+    setLightboxPhotoIndex(null);
+  };
+  const openLightbox = (index: number) => {
+    setLightboxPhotoIndex(index);
+  };
+  const closeLightbox = () => {
+    setLightboxPhotoIndex(null);
+  };
+  const goToPreviousLightboxPhoto = () => {
+    if (lightboxPhotoIndex === null || !selectedPhotos.length) return;
+    setLightboxPhotoIndex((lightboxPhotoIndex - 1 + selectedPhotos.length) % selectedPhotos.length);
+  };
+  const goToNextLightboxPhoto = () => {
+    if (lightboxPhotoIndex === null || !selectedPhotos.length) return;
+    setLightboxPhotoIndex((lightboxPhotoIndex + 1) % selectedPhotos.length);
   };
 
   const timelineHref = useMemo(() => {
@@ -162,6 +187,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
     if (selectedGroupId && !groups.some((group) => group.id === selectedGroupId)) {
       setSelectedGroupId(null);
       selectedGroupIdRef.current = null;
+      setLightboxPhotoIndex(null);
     }
   }, [groups, focusedGroupId, selectedGroupId]);
 
@@ -229,6 +255,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
           setSelectedGroupId(null);
           selectedGroupIdRef.current = null;
           setActiveEntryIndex(0);
+          setLightboxPhotoIndex(null);
           map.flyTo({ center: [group.lng, group.lat], zoom: 5, speed: 0.8 });
           return;
         }
@@ -240,6 +267,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
         setSelectedGroupId(group.id);
         selectedGroupIdRef.current = group.id;
         setActiveEntryIndex(0);
+        setLightboxPhotoIndex(null);
       });
 
       const marker = new mapboxgl.Marker(markerEl, { anchor: 'bottom' })
@@ -350,6 +378,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
         setSelectedGroupId(null);
         selectedGroupIdRef.current = null;
         setActiveEntryIndex(0);
+        setLightboxPhotoIndex(null);
 
         const bounds = computeFeatureBounds(feature);
         if (bounds) {
@@ -367,6 +396,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
       setSelectedGroupId(matchingGroup.id);
       selectedGroupIdRef.current = matchingGroup.id;
       setActiveEntryIndex(0);
+      setLightboxPhotoIndex(null);
     };
 
     const handleMouseEnter = () => {
@@ -433,6 +463,7 @@ export function MapGlobe({ locations }: MapGlobeProps) {
     setSelectedGroupId(null);
     selectedGroupIdRef.current = null;
     setActiveEntryIndex(0);
+    setLightboxPhotoIndex(null);
   }, [mode]);
 
   useEffect(() => {
@@ -442,6 +473,17 @@ export function MapGlobe({ locations }: MapGlobeProps) {
     }
     setActiveEntryIndex((prev) => Math.min(prev, selectedGroup.entries.length - 1));
   }, [selectedGroup]);
+
+  useEffect(() => {
+    setLightboxPhotoIndex(null);
+  }, [activeEntryIndex, selectedGroupId]);
+
+  useEffect(() => {
+    setLightboxPhotoIndex((prev) => {
+      if (prev === null) return null;
+      return Math.min(prev, Math.max(selectedPhotos.length - 1, 0));
+    });
+  }, [selectedPhotos.length]);
 
   if (!env.NEXT_PUBLIC_MAPBOX_TOKEN) {
     return (
@@ -619,75 +661,165 @@ export function MapGlobe({ locations }: MapGlobeProps) {
         <div ref={mapContainerRef} className="h-[480px] w-full overflow-hidden rounded-3xl border border-slate-800" />
         {selectedGroup && selectedEntry ? (
           <>
-            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4">
-              <div className="pointer-events-auto w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900/95 p-6 shadow-2xl shadow-black/50">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+            <div className="pointer-events-none absolute inset-0 z-30 flex items-end justify-center p-3 sm:p-4 md:items-center">
+              <div className="pointer-events-auto w-full max-w-lg overflow-hidden rounded-3xl border border-slate-700 bg-slate-900/95 shadow-2xl shadow-black/50">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-4 py-3 sm:px-5">
+                  <div className="min-w-0">
                     <p className="text-xs uppercase tracking-wide text-slate-400">
                       {totalEntries} {totalEntries === 1 ? 'day' : 'days'} recorded
                     </p>
-                    <h3 className="mt-1 text-lg font-semibold text-white">{selectedGroup.label}</h3>
+                    <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <h3 className="text-base font-semibold text-white sm:text-lg">{selectedGroup.label}</h3>
+                      <p className="text-xs text-slate-400 sm:text-sm">
+                        Day {selectedEntry.dayIndex} • {formatDateForDisplay(selectedEntry.date)}
+                      </p>
+                    </div>
                   </div>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="text-slate-400 hover:text-white"
-                    onClick={() => {
-                      setSelectedGroupId(null);
-                      selectedGroupIdRef.current = null;
-                    }}
-                    aria-label="Close carousel"
+                    className="h-9 w-9 shrink-0 rounded-xl text-slate-400 hover:text-white"
+                    onClick={closeSelectedGroup}
+                    aria-label="Close location details"
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="mt-4 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-300 shadow-inner shadow-black/20">
-                  <p className="text-sm font-semibold text-white">{selectedEntry.tripName}</p>
-                  <p className="text-xs text-slate-400">
-                    Day {selectedEntry.dayIndex} • {formatDateForDisplay(selectedEntry.date)}
-                  </p>
-                  {selectedEntry.highlight ? (
-                    <p className="mt-2 text-sm text-slate-200">Highlight: {selectedEntry.highlight}</p>
-                  ) : null}
-                  {selectedEntry.hashtags.length ? (
-                    <p className="mt-2 text-xs uppercase tracking-wide text-slate-400">
-                      {selectedEntry.hashtags.map((tag) => `#${tag}`).join(' ')}
-                    </p>
-                  ) : null}
-                  <Button variant="ghost" size="sm" className="mt-3 px-0 text-brand" asChild>
-                    <a href={`/trips/${selectedEntry.tripId}#day-${selectedEntry.dayIndex}`}>Open trip</a>
-                  </Button>
-                </div>
-                {totalEntries > 1 ? (
-                  <div className="mt-4 flex items-center justify-between rounded-full border border-slate-800 bg-slate-900/60 px-3 py-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      onClick={goToPreviousEntry}
-                      disabled={activeEntryIndex === 0}
-                      aria-label="Previous day"
+
+                <div className="space-y-4 px-4 py-4 sm:px-5">
+                  {selectedPhotos.length ? (
+                    <div
+                      className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1"
+                      aria-label="Photos for selected day"
                     >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-xs font-medium text-slate-300">
-                      {activeEntryIndex + 1} / {totalEntries}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      onClick={goToNextEntry}
-                      disabled={activeEntryIndex >= totalEntries - 1}
-                      aria-label="Next day"
-                    >
-                      <ChevronRight className="h-4 w-4" />
+                      {selectedPhotos.map((photo, index) => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          className="relative h-44 w-[82%] flex-none snap-center overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 sm:h-56 sm:w-[78%]"
+                          onClick={() => {
+                            openLightbox(index);
+                          }}
+                          aria-label={`Open photo ${index + 1}`}
+                        >
+                          <Image
+                            src={photo.thumbnailUrl}
+                            alt="Trip day photo"
+                            fill
+                            className="object-cover"
+                            sizes="(min-width: 640px) 405px, 82vw"
+                          />
+                        </button>
+                        ))}
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-2 text-sm text-slate-300">
+                    {selectedEntry.highlight ? (
+                      <p className="text-slate-200">Highlight: {selectedEntry.highlight}</p>
+                    ) : null}
+                    {selectedEntry.hashtags.length ? (
+                      <p className="text-xs uppercase tracking-wide text-slate-400">
+                        {selectedEntry.hashtags.map((tag) => `#${tag}`).join(' ')}
+                      </p>
+                    ) : null}
+                    <Button variant="ghost" size="sm" className="h-auto px-0 py-1 text-brand" asChild>
+                      <a href={`/trips/${selectedEntry.tripId}#day-${selectedEntry.dayIndex}`}>Open trip</a>
                     </Button>
                   </div>
-                ) : null}
+                </div>
+
+                <div className="flex items-center justify-between gap-3 border-t border-slate-800 px-4 py-3 sm:px-5">
+                  {totalEntries > 1 ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="gap-1"
+                        onClick={goToPreviousEntry}
+                        disabled={activeEntryIndex === 0}
+                        aria-label="Previous day"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="hidden sm:inline">
+                          Day {selectedGroup.entries[Math.max(activeEntryIndex - 1, 0)]?.dayIndex}
+                        </span>
+                      </Button>
+                      <span className="text-xs font-medium text-slate-300">
+                        {activeEntryIndex + 1} / {totalEntries}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="gap-1"
+                        onClick={goToNextEntry}
+                        disabled={activeEntryIndex >= totalEntries - 1}
+                        aria-label="Next day"
+                      >
+                        <span className="hidden sm:inline">
+                          Day {selectedGroup.entries[Math.min(activeEntryIndex + 1, totalEntries - 1)]?.dayIndex}
+                        </span>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="flex w-full justify-center">
+                      <span className="text-xs font-medium text-slate-400">Only day recorded here</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+            {lightboxPhoto ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-4 top-4 z-30 rounded-xl text-slate-200 hover:text-white sm:right-6 sm:top-6"
+                  onClick={closeLightbox}
+                  aria-label="Close photo"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+                <div className="relative h-[70vh] max-h-[760px] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl">
+                  <Image
+                    src={lightboxPhoto.fullUrl}
+                    alt="Trip day photo"
+                    fill
+                    className="object-contain"
+                    sizes="100vw"
+                  />
+                  {selectedPhotos.length > 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        className="absolute left-0 top-0 z-20 h-full w-1/2"
+                        onClick={goToPreviousLightboxPhoto}
+                        aria-label="Previous photo"
+                      >
+                        <span className="pointer-events-none absolute left-4 top-1/2 flex -translate-y-1/2 rounded-full border border-slate-700 bg-slate-900/80 p-3 text-slate-200">
+                          <ChevronLeft className="h-6 w-6" />
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="absolute right-0 top-0 z-20 h-full w-1/2"
+                        onClick={goToNextLightboxPhoto}
+                        aria-label="Next photo"
+                      >
+                        <span className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 rounded-full border border-slate-700 bg-slate-900/80 p-3 text-slate-200">
+                          <ChevronRight className="h-6 w-6" />
+                        </span>
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <div className="absolute inset-0 z-20 rounded-3xl bg-slate-950/70 backdrop-blur-sm" />
           </>
         ) : null}
@@ -733,7 +865,8 @@ function groupLocations(locations: MapLocationEntry[], mode: GroupingMode): Loca
       date: location.date,
       dayIndex: location.dayIndex,
       highlight: location.highlight,
-      hashtags: location.hashtags
+      hashtags: location.hashtags,
+      dayPhotos: location.dayPhotos ?? []
     });
   }
 
@@ -1129,4 +1262,3 @@ function extractFirstMatchingName(
 
   return null;
 }
-

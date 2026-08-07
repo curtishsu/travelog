@@ -47,7 +47,7 @@ export function PhotoGallery({ photos, onDelete, layout = 'grid' }: PhotoGallery
       <div
         className={
           isCarousel
-            ? 'flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2'
+            ? 'flex w-full max-w-full snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-2'
             : 'grid grid-cols-2 gap-3 sm:grid-cols-3'
         }
       >
@@ -144,4 +144,3 @@ export function PhotoGallery({ photos, onDelete, layout = 'grid' }: PhotoGallery
     </>
   );
 }
-

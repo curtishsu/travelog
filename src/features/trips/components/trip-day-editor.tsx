@@ -1441,7 +1441,7 @@ export function TripDayEditor({
             </div>
           ) : null}
         </div>
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3 overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold text-white">Photos</div>
             <div className="flex items-center gap-3">
@@ -1469,7 +1469,9 @@ export function TripDayEditor({
           {isUploadingPhotos ? <p className="text-xs text-slate-400">Uploading photos…</p> : null}
           {photoError ? <p className="text-xs text-red-300">{photoError}</p> : null}
           {day.photos?.length ? (
-            <PhotoGallery photos={day.photos} onDelete={handleDeletePhoto} layout="carousel" />
+            <div className="min-w-0 max-w-full overflow-hidden">
+              <PhotoGallery photos={day.photos} onDelete={handleDeletePhoto} layout="carousel" />
+            </div>
           ) : (
             <p className="text-sm text-slate-500">No photos added yet.</p>
           )}
@@ -1493,4 +1495,3 @@ export function TripDayEditor({
     </div>
   );
 }
-
